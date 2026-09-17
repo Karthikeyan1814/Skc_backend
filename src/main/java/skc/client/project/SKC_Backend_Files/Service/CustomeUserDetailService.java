@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
 
 import skc.client.project.SKC_Backend_Files.Repo.AdminRepo;
 import skc.client.project.SKC_Backend_Files.Repo.ClientRepo;
@@ -11,6 +12,7 @@ import skc.client.project.SKC_Backend_Files.Wrapper.AuthUser;
 import skc.client.project.SKC_Backend_Files.entity.Admin;
 import skc.client.project.SKC_Backend_Files.entity.Client;
 
+@Service
 public class CustomeUserDetailService implements UserDetailsService {
 	
 	@Autowired
@@ -19,10 +21,11 @@ public class CustomeUserDetailService implements UserDetailsService {
 	@Autowired
 	private ClientRepo clientrepo;
 
+	
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 		
-		Admin admindetails =  adminrepo.findByEmail(username);
+		Admin admindetails =  adminrepo.findByMobile(username);
 		
 		if(admindetails != null) {
 			return new AuthUser(
@@ -33,7 +36,7 @@ public class CustomeUserDetailService implements UserDetailsService {
 					);
 		}
 		
-		Client client =clientrepo.findByEmail(username);
+		Client client =clientrepo.findByMobile(username);
 		
 		if(client !=null) {
 			return new AuthUser(
@@ -48,5 +51,7 @@ public class CustomeUserDetailService implements UserDetailsService {
 	                "User Not Found"
 	        );
 	}
+
+	
 
 }

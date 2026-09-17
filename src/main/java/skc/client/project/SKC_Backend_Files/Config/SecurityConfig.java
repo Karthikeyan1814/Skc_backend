@@ -22,9 +22,9 @@ public class SecurityConfig {
 	SecurityFilterChain securityfilterchain(HttpSecurity http) {
 		return http.csrf(csrf-> csrf.disable())
 				.authorizeHttpRequests(auth ->{
-					auth.requestMatchers("/login","/skc/register").permitAll();
-					
-					auth.requestMatchers("/Admin/**").hasRole("ADMIN");
+					auth.requestMatchers("/skc/SignIn/**","/skc/register/Client","/skc/register/Admin").permitAll();
+					 
+					auth.requestMatchers("/skc/Admin/**").hasRole("ADMIN");
 					auth.anyRequest().authenticated();
 				})
 				.addFilterBefore(jwtfilter,UsernamePasswordAuthenticationFilter.class)

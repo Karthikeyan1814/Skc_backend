@@ -10,12 +10,12 @@ public class Admin {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Integer id;
+	private Long id;
 	private String name;
 	private String email;
 	private String password;
-	private String mobileno;
-	private String altmobileno;
+	private String mobile;
+	private String altmobile;
 	private String role;
 	public String getName() {
 		return name;
@@ -35,17 +35,17 @@ public class Admin {
 	public void setPassword(String password) {
 		this.password = password;
 	}
-	public String getMobileno() {
-		return mobileno;
+	public String getMobile() {
+		return mobile;
 	}
-	public void setMobileno(String mobileno) {
-		this.mobileno = mobileno;
+	public void setMobile(String mobile) {
+		this.mobile = mobile;
 	}
-	public String getAltmobileno() {
-		return altmobileno;
+	public String getAltmobile() {
+		return altmobile;
 	}
-	public void setAltmobileno(String altmobileno) {
-		this.altmobileno = altmobileno;
+	public void setAltmobileno(String altmobile) {
+		this.altmobile = altmobile;
 	}
 	public String getRole() {
 		return role;
@@ -53,17 +53,17 @@ public class Admin {
 	public void setRole(String role) {
 		this.role = role;
 	}
-	public Integer getId() {
+	public Long getId() {
 		return id;
 	}
-	public Admin(String name, String email, String password, String mobileno, String altmobileno, String role) {
+	public Admin(String name, String email, String password, String mobile, String altmobile) {
 		super();
 		this.name = name;
 		this.email = email;
 		this.password = password;
-		this.mobileno = mobileno;
-		this.altmobileno = altmobileno;
-		this.role = role;
+		this.mobile = mobile;
+		this.altmobile = altmobile;
+		this.role = "ADMIN";
 	}
 	
 	public Admin() {

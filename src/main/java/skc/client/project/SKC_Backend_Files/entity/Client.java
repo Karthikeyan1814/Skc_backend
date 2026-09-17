@@ -1,5 +1,7 @@
 package skc.client.project.SKC_Backend_Files.entity;
 
+import java.util.List;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonProperty.Access;
 
@@ -7,13 +9,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 
 @Entity
 public class Client {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Integer id;
+	private Long id;
 	private String email;
 	@JsonProperty(access = Access.WRITE_ONLY)
 	private String password;
@@ -23,7 +26,21 @@ public class Client {
 	private String shopname;
 	private String location;
 	
+	@OneToMany(mappedBy = "client")
+	private List<FileEntity> files;
 	
+	
+	public List<FileEntity> getFiles() {
+		return files;
+	}
+
+
+	public void setFiles(List<FileEntity> files) {
+		this.files = files;
+	}
+
+
+
 	public String getEmail() {
 		return email;
 	}
@@ -94,19 +111,20 @@ public class Client {
 	}
 
 
-	public Integer getId() {
+	public Long getId() {
 		return id;
 	}
 
 
-	public Client(String email, String password, String name, String mobile, String role, String shopname,
+
+	public Client(String email, String password, String name, String mobile, String shopname,
 			String location) {
 		super();
 		this.email = email;
 		this.password = password;
 		this.name = name;
 		this.mobile = mobile;
-		this.role = role;
+		this.role = "CLIENT";
 		this.shopname = shopname;
 		this.location = location;
 	}

@@ -12,7 +12,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import skc.client.project.SKC_Backend_Files.Repo.AdminRepo;
 import skc.client.project.SKC_Backend_Files.Repo.ClientRepo;
+import skc.client.project.SKC_Backend_Files.entity.Admin;
 import skc.client.project.SKC_Backend_Files.entity.Client;
 
 @RestController
@@ -25,18 +27,33 @@ public class RegisterController {
 	@Autowired
 	private ClientRepo clientRepo;
 	
+	@Autowired
+	private AdminRepo adminRepo;
+	
+	
+	
 	public RegisterController(PasswordEncoder encode) {
 		passwordencoder=encode;
 	}
 	
-	@PostMapping("/register")
+	@PostMapping("/register/Client")
 	public ResponseEntity<Object> registerClient(@RequestBody Client client){
 		client.setPassword(passwordencoder.encode(client.getPassword()));
-		client.setRole("ROLE");
 		clientRepo.save(client);
 		Map<String,Object> response=new HashMap<String, Object>();
 		response.put("status", "success");
 		response.put("Message", "Registation Successfully !!!");
 		return ResponseEntity.ok(response);
 	}
+	
+	@PostMapping("/register/Admin")
+	public ResponseEntity<Object> registerAdmin(@RequestBody Admin admin){
+		admin.setPassword(passwordencoder.encode(admin.getPassword()));
+		adminRepo.save(admin);
+		Map<String,Object> response=new HashMap<String,Object>();
+		response.put("status","Success");
+		response.put("Message","Registation Successfull !!");
+		return ResponseEntity.ok(response);
+	}
+	
 }
