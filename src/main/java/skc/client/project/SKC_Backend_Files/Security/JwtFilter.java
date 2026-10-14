@@ -46,9 +46,9 @@ public class JwtFilter  extends GenericFilter{
 				String username= jwtutil.extractUsername(token);
 				
 				
-				System.out.println("before user");
+				
 				UserDetails user=UserServices.loadUserByUsername(username);
-				System.out.println("After user");
+				
 				
 				UsernamePasswordAuthenticationToken auth= new UsernamePasswordAuthenticationToken(
 						user,
@@ -56,7 +56,9 @@ public class JwtFilter  extends GenericFilter{
 						user.getAuthorities());
 				
 				SecurityContextHolder.getContext().setAuthentication(auth);
-				System.out.print(token);
+				System.out.print(user.getUsername());
+				System.out.print(user.getAuthorities());
+				System.out.print("Token"+token);
 				
 				
 			}catch(Exception e) {

@@ -23,7 +23,10 @@ public class Client {
 	private String name;
 	private String mobile;
 	private String role;
-	private String shopname;
+	private String legalname;
+	private String gstnumber;
+	private String pannumber;
+	private boolean temppass;
 	private String location;
 	
 	@OneToMany(mappedBy = "client")
@@ -91,13 +94,46 @@ public class Client {
 	}
 
 
-	public String getShopname() {
-		return shopname;
+	
+
+
+	public String getLegalname() {
+		return legalname;
 	}
 
 
-	public void setShopname(String shopname) {
-		this.shopname = shopname;
+	public void setLegalname(String legalname) {
+		this.legalname = legalname;
+	}
+
+
+	public String getGstnumber() {
+		return gstnumber;
+	}
+
+
+	public void setGstnumber(String gstnumber) {
+		this.gstnumber = gstnumber;
+	}
+
+
+	public String getPannumber() {
+		return pannumber;
+	}
+
+
+	public void setPannumber(String pannumber) {
+		this.pannumber = pannumber;
+	}
+
+
+	public boolean isTemppass() {
+		return temppass;
+	}
+
+
+	public void setTemppass(boolean temppass) {
+		this.temppass = temppass;
 	}
 
 
@@ -115,18 +151,23 @@ public class Client {
 		return id;
 	}
 
+	
 
-
-	public Client(String email, String password, String name, String mobile, String shopname,
-			String location) {
+	public Client( String email, String password, String name, String mobile, String role, String legalname,
+			String gstnumber, String pannumber, boolean temppass, String location, List<FileEntity> files) {
 		super();
+	
 		this.email = email;
 		this.password = password;
 		this.name = name;
 		this.mobile = mobile;
-		this.role = "CLIENT";
-		this.shopname = shopname;
+		this.role = role;
+		this.legalname = legalname;
+		this.gstnumber = gstnumber;
+		this.pannumber = pannumber;
+		this.temppass = temppass;
 		this.location = location;
+		this.files = files;
 	}
 
 
