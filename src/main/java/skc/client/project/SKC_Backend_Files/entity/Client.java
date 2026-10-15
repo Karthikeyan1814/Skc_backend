@@ -1,7 +1,10 @@
 package skc.client.project.SKC_Backend_Files.entity;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonProperty.Access;
 
@@ -10,6 +13,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.PrePersist;
 
 @Entity
 public class Client {
@@ -26,9 +30,43 @@ public class Client {
 	private String legalname;
 	private String gstnumber;
 	private String pannumber;
-	private boolean temppass;
+	private Boolean temppass = false;
 	private String location;
+
+	// Membership: NONE, MEMBER
+	private String membershipStatus = "NONE";
+
+	// Membership plan tier: SILVER, GOLD, PLATINUM
+	private String membershipPlan;
+
+	// Membership expiry date
+	private LocalDate membershipExpiry;
+
+	// Membership activation timestamp
+	private LocalDateTime membershipActivatedAt;
+
+	private Boolean active = true;
+
+	private Boolean reconsultationRequested = false;
+
+	@jakarta.persistence.Column(columnDefinition = "TEXT")
+	private String reconsultationNotes;
+
+	private LocalDateTime reconsultationRequestedAt;
+
+	private Integer formversion;
+
+	@jakarta.persistence.Column(columnDefinition = "TEXT")
+	private String customFields;
+
+	private LocalDateTime createdAt;
+
+	@PrePersist
+	public void prePersist() {
+		if (this.createdAt == null) this.createdAt = LocalDateTime.now();
+	}
 	
+	@JsonIgnore
 	@OneToMany(mappedBy = "client")
 	private List<FileEntity> files;
 	
@@ -127,12 +165,12 @@ public class Client {
 	}
 
 
-	public boolean isTemppass() {
-		return temppass;
+	public Boolean isTemppass() {
+		return temppass != null && temppass;
 	}
 
 
-	public void setTemppass(boolean temppass) {
+	public void setTemppass(Boolean temppass) {
 		this.temppass = temppass;
 	}
 
@@ -153,10 +191,32 @@ public class Client {
 
 	
 
-	public Client( String email, String password, String name, String mobile, String role, String legalname,
+	public String getMembershipStatus() { return membershipStatus; }
+	public void setMembershipStatus(String membershipStatus) { this.membershipStatus = membershipStatus; }
+	public String getMembershipPlan() { return membershipPlan; }
+	public void setMembershipPlan(String membershipPlan) { this.membershipPlan = membershipPlan; }
+	public LocalDate getMembershipExpiry() { return membershipExpiry; }
+	public void setMembershipExpiry(LocalDate membershipExpiry) { this.membershipExpiry = membershipExpiry; }
+	public LocalDateTime getMembershipActivatedAt() { return membershipActivatedAt; }
+	public void setMembershipActivatedAt(LocalDateTime membershipActivatedAt) { this.membershipActivatedAt = membershipActivatedAt; }
+	public Boolean isActive() { return active != null && active; }
+	public void setActive(Boolean active) { this.active = active; }
+	public Boolean isReconsultationRequested() { return reconsultationRequested != null && reconsultationRequested; }
+	public void setReconsultationRequested(Boolean reconsultationRequested) { this.reconsultationRequested = reconsultationRequested; }
+	public String getReconsultationNotes() { return reconsultationNotes; }
+	public void setReconsultationNotes(String reconsultationNotes) { this.reconsultationNotes = reconsultationNotes; }
+	public LocalDateTime getReconsultationRequestedAt() { return reconsultationRequestedAt; }
+	public void setReconsultationRequestedAt(LocalDateTime reconsultationRequestedAt) { this.reconsultationRequestedAt = reconsultationRequestedAt; }
+	public Integer getFormversion() { return formversion; }
+	public void setFormversion(Integer formversion) { this.formversion = formversion; }
+	public String getCustomFields() { return customFields; }
+	public void setCustomFields(String customFields) { this.customFields = customFields; }
+	public LocalDateTime getCreatedAt() { return createdAt; }
+	public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+	public Client(String email, String password, String name, String mobile, String role, String legalname,
 			String gstnumber, String pannumber, boolean temppass, String location, List<FileEntity> files) {
 		super();
-	
 		this.email = email;
 		this.password = password;
 		this.name = name;
@@ -168,10 +228,9 @@ public class Client {
 		this.temppass = temppass;
 		this.location = location;
 		this.files = files;
+		this.active = true;
+		this.membershipStatus = "NONE";
 	}
 
-
-	public Client() {
-		
-	}
+	public Client() {}
 }

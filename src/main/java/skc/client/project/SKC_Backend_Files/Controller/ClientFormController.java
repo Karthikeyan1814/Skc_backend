@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -83,6 +84,46 @@ public class ClientFormController {
 
 			return ResponseEntity.ok(updated);
 		}).orElseGet(() -> ResponseEntity.notFound().build());
+	}
+
+	/*
+	 * Activate one field by its database ID.
+	 */
+	@PatchMapping("/Field/{id}/Activate")
+	public ResponseEntity<?> activateField(@PathVariable Long id) {
+
+		return repository.findById(id).map(field -> {
+			field.setActive(true);
+			ClientFormField updated = repository.save(field);
+
+			return ResponseEntity.ok(updated);
+		}).orElseGet(() -> ResponseEntity.notFound().build());
+	}
+
+	/*
+	 * Toggle active status of one field.
+	 */
+	@PatchMapping("/Field/{id}/ToggleActive")
+	public ResponseEntity<?> toggleFieldActive(@PathVariable Long id) {
+
+		return repository.findById(id).map(field -> {
+			field.setActive(!field.isActive());
+			ClientFormField updated = repository.save(field);
+
+			return ResponseEntity.ok(updated);
+		}).orElseGet(() -> ResponseEntity.notFound().build());
+	}
+
+	/*
+	 * Delete a custom field by ID.
+	 */
+	@DeleteMapping("/Field/{id}")
+	public ResponseEntity<?> deleteField(@PathVariable Long id) {
+		if (repository.existsById(id)) {
+			repository.deleteById(id);
+			return ResponseEntity.ok(Map.of("status", "success", "message", "Field deleted successfully"));
+		}
+		return ResponseEntity.notFound().build();
 	}
 
 	// API 1: Get all existing form versions

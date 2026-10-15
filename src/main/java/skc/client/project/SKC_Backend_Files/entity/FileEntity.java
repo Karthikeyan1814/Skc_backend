@@ -1,204 +1,126 @@
 package skc.client.project.SKC_Backend_Files.entity;
 
-import java.sql.Date;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name="files")
+@Table(name = "files")
 public class FileEntity {
-	
-	@Id
-	@GeneratedValue(strategy = GenerationType.SEQUENCE)
-	private Long id;
-	
-	private String fileName;
-	
-	private String contentType;
-	
-	private String userName;
-	
-	private String userEmail;
-	
-	private String userMobile;
-	
-	private String status;
-	
-	private Long size;
-	
-	private Date createdAt;
-	
-	private String category;
-	
-	
-	private String objectKey;
-	
-	@ManyToOne
-	@JoinColumn(name="client_id")
-	private Client client;
-	
 
-	
-	public String getCategory() {
-		return category;
-	}
+    @Id
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    private Long id;
 
+    private String fileName;
+    private String contentType;
 
-	public void setCategory(String category) {
-		this.category = category;
-	}
+    // Uploader info
+    private String userName;
+    private String userEmail;
+    private String userMobile;
 
+    // File status: ACTIVE, EXPIRED
+    private String status = "ACTIVE";
 
-	public Client getClient() {
-		return client;
-	}
+    private Long size;
 
+    private LocalDateTime createdAt;
 
-	public void setClient(Client client) {
-		this.client = client;
-	}
+    // Category: GST, ROC, TAX, FINANCIAL, PAYROLL, CERTIFICATE, COMPLIANCE, IMPORTANT
+    private String category;
 
+    // S3 object key
+    private String objectKey;
 
-	public String getObjectKey() {
-		return objectKey;
-	}
+    // Direction: SENT_TO_CLIENT (admin/staff → client), UPLOADED_BY_CLIENT (client → admin/staff)
+    private String direction;
 
+    // Who uploaded: ADMIN, STAFF, CLIENT
+    private String uploadedByRole;
+    private Long uploadedById;
 
-	public void setObjectKey(String objectKey) {
-		this.objectKey = objectKey;
-	}
+    // Expiration date (null = no expiry)
+    private LocalDate expirationDate;
 
+    // Extension request flag
+    private boolean extensionRequested = false;
 
-	public String getFileName() {
-		return fileName;
-	}
+    @ManyToOne
+    @JoinColumn(name = "client_id")
+    private Client client;
 
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+    }
 
-	public void setFileName(String fileName) {
-		this.fileName = fileName;
-	}
+    public FileEntity() {}
 
+    // Getters and Setters
+    public Long getId() { return id; }
 
-	public String getContentType() {
-		return contentType;
-	}
+    public String getFileName() { return fileName; }
+    public void setFileName(String fileName) { this.fileName = fileName; }
 
+    public String getContentType() { return contentType; }
+    public void setContentType(String contentType) { this.contentType = contentType; }
 
-	public void setContentType(String contentType) {
-		this.contentType = contentType;
-	}
+    public String getUserName() { return userName; }
+    public void setUserName(String userName) { this.userName = userName; }
 
+    public String getUserEmail() { return userEmail; }
+    public void setUserEmail(String userEmail) { this.userEmail = userEmail; }
 
-	public String getUserName() {
-		return userName;
-	}
+    public String getUserMobile() { return userMobile; }
+    public void setUserMobile(String userMobile) { this.userMobile = userMobile; }
 
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
-	public void setUserName(String userName) {
-		this.userName = userName;
-	}
+    public Long getSize() { return size; }
+    public void setSize(Long size) { this.size = size; }
 
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
-	public Long getSize() {
-		return size;
-	}
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
 
+    public String getObjectKey() { return objectKey; }
+    public void setObjectKey(String objectKey) { this.objectKey = objectKey; }
 
-	public void setSize(Long size) {
-		this.size = size;
-	}
+    public String getDirection() { return direction; }
+    public void setDirection(String direction) { this.direction = direction; }
 
+    public String getUploadedByRole() { return uploadedByRole; }
+    public void setUploadedByRole(String uploadedByRole) { this.uploadedByRole = uploadedByRole; }
 
+    public Long getUploadedById() { return uploadedById; }
+    public void setUploadedById(Long uploadedById) { this.uploadedById = uploadedById; }
 
+    public LocalDate getExpirationDate() { return expirationDate; }
+    public void setExpirationDate(LocalDate expirationDate) { this.expirationDate = expirationDate; }
 
-	public Long getId() {
-		return id;
-	}
-	
-	public FileEntity() {
-		
-	}
+    public boolean isExtensionRequested() { return extensionRequested; }
+    public void setExtensionRequested(boolean extensionRequested) { this.extensionRequested = extensionRequested; }
 
+    public Client getClient() { return client; }
+    public void setClient(Client client) { this.client = client; }
 
-	public Date getCreatedAt() {
-		return createdAt;
-	}
-
-
-	public void setCreatedAt(Date createdAt) {
-		this.createdAt = createdAt;
-	}
-
-
-	public String getUserEmail() {
-		return userEmail;
-	}
-
-
-	public void setUserEmail(String userEmail) {
-		this.userEmail = userEmail;
-	}
-
-
-	public String getUserMobile() {
-		return userMobile;
-	}
-
-
-	public void setUserMobile(String userMobile) {
-		this.userMobile = userMobile;
-	}
-
-
-	public String getStatus() {
-		return status;
-	}
-
-
-	public void setStatus(String status) {
-		this.status = status;
-	}
-
-
-	public FileEntity(String fileName, String contentType, String userName, String userEmail, String userMobile,
-			String status, Long size, Date createdAt, String category, String objectKey, Client client) {
-		super();
-		this.fileName = fileName;
-		this.contentType = contentType;
-		this.userName = userName;
-		this.userEmail = userEmail;
-		this.userMobile = userMobile;
-		this.status = status;
-		this.size = size;
-		this.createdAt = createdAt;
-		this.category = category;
-		this.objectKey = objectKey;
-		this.client = client;
-	}
-
-
-
-	
-
-
-
-
-
-
-
-
-
-	
-	
-	
-
+    /**
+     * Returns true if the file is expired (expiration date set and in the past).
+     */
+    public boolean isExpired() {
+        if (expirationDate == null) return false;
+        return LocalDate.now().isAfter(expirationDate);
+    }
 }
-

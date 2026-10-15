@@ -29,6 +29,10 @@ public class CorsConfig {
                 List.of("*")
         );
 
+        configuration.setExposedHeaders(
+                List.of("Content-Disposition", "Content-Type", "Content-Length")
+        );
+
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source =

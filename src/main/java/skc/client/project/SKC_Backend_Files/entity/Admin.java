@@ -17,6 +17,14 @@ public class Admin {
 	private String mobile;
 	private String altmobile;
 	private String role;
+	private Boolean active = true;
+
+	public Boolean isActive() {
+		return active == null || active;
+	}
+	public void setActive(Boolean active) {
+		this.active = active;
+	}
 	public String getName() {
 		return name;
 	}
@@ -43,6 +51,9 @@ public class Admin {
 	}
 	public String getAltmobile() {
 		return altmobile;
+	}
+	public void setAltmobile(String altmobile) {
+		this.altmobile = altmobile;
 	}
 	public void setAltmobileno(String altmobile) {
 		this.altmobile = altmobile;

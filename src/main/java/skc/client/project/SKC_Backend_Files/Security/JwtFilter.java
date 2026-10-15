@@ -41,20 +41,23 @@ public class JwtFilter  extends GenericFilter{
 			
 			try {
 				
-				String token =authHeader.substring(7);
-				
-				String username= jwtutil.extractUsername(token);
-				
-				
-				
-				UserDetails user=UserServices.loadUserByUsername(username);
-				
-				
-				UsernamePasswordAuthenticationToken auth= new UsernamePasswordAuthenticationToken(
+				String token = authHeader.substring(7);
+				String username = jwtutil.extractUsername(token);
+				String role = jwtutil.extractRole(token);
+				Long id = jwtutil.extractId(token);
+
+				UserDetails user;
+				if (role != null && id != null) {
+					user = new skc.client.project.SKC_Backend_Files.Wrapper.AuthUser(id, username, "", role);
+				} else {
+					user = UserServices.loadUserByUsername(username);
+				}
+
+				UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
 						user,
 						null,
 						user.getAuthorities());
-				
+
 				SecurityContextHolder.getContext().setAuthentication(auth);
 				System.out.print(user.getUsername());
 				System.out.print(user.getAuthorities());

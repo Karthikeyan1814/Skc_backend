@@ -19,34 +19,44 @@ public class SecurityConfig {
     private JwtFilter jwtfilter;
 
     @Bean
-    SecurityFilterChain securityfilterchain(HttpSecurity http)
-            throws Exception {
+    SecurityFilterChain securityfilterchain(HttpSecurity http) throws Exception {
 
         return http
                 .cors(cors -> {})
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> {
 
+                    // Public endpoints
                     auth.requestMatchers(
+                            "/error",
                             "/skc/SignIn/**",
-                            "/skc/register/Client",
-                            "/skc/register/Admin"
+                            "/skc/register/**",
+                            "/skc/Membership/**",
+                            "/Membership/**",
+                            "/skc/Public/**",
+                            "/Public/**"
                     ).permitAll();
 
-                    // Allow browser CORS preflight requests
-                    auth.requestMatchers(
-                            HttpMethod.OPTIONS, "/**"
-                    ).permitAll();
+                    // CORS preflight
+                    auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
 
-                    auth.requestMatchers("/skc/Admin/**")
-                            .hasRole("ADMIN");
+                    // Admin & Staff shared client directory and form fields
+                    auth.requestMatchers("/skc/Admin/Clients").hasAnyRole("ADMIN", "STAFF");
+                    auth.requestMatchers("/skc/Admin/ClientForm/**").hasAnyRole("ADMIN", "STAFF");
 
+                    // Admin-only routes
+                    auth.requestMatchers("/skc/Admin/**").hasRole("ADMIN");
+
+                    // Staff routes (admin can also access)
+                    auth.requestMatchers("/skc/Staff/**").hasAnyRole("ADMIN", "STAFF");
+
+                    // Client routes
+                    auth.requestMatchers("/skc/Client/**").hasAnyRole("ADMIN", "STAFF", "CLIENT");
+
+                    // Everything else requires authentication
                     auth.anyRequest().authenticated();
                 })
-                .addFilterBefore(
-                        jwtfilter,
-                        UsernamePasswordAuthenticationFilter.class
-                )
+                .addFilterBefore(jwtfilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
 

@@ -3,6 +3,7 @@ package skc.client.project.SKC_Backend_Files.Service;
 import java.io.IOException;
 import java.sql.Date;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -66,7 +67,7 @@ public class FileHandling {
 		entity.setContentType(file.getContentType());
 		entity.setSize(file.getSize());
 		
-		entity.setCreatedAt( new Date (System.currentTimeMillis()));
+		entity.setCreatedAt(LocalDateTime.now());
 		
 //		entity.setUserName(userdetails.getName());
 //		entity.setUserEmail(userdetails.getEmail());
