@@ -367,9 +367,9 @@ public class AccessManagementController {
         }
 
         String email = staff.getEmail().trim().toLowerCase();
-        if (staffRepo.findByEmail(email) != null || adminRepo.findByEmail(email) != null || clientRepo.findByEmail(email) != null) {
+        if (staffRepo.findByEmail(email) != null) {
             response.put("status", "failed");
-            response.put("message", "An account with this email already exists");
+            response.put("message", "A staff account with this email already exists");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -387,6 +387,7 @@ public class AccessManagementController {
         Staff saved = staffRepo.save(staff);
 
         if (saved.getEmail() != null && !saved.getEmail().isBlank()) {
+            System.out.println(">>> [AccessManagementController] Dispatching welcome email to staff: " + saved.getEmail());
             emailService.sendAccountCreationWelcomeEmail(
                     saved.getEmail(),
                     saved.getName() != null ? saved.getName() : "Staff Member",
@@ -432,15 +433,15 @@ public class AccessManagementController {
         }
 
         email = email.trim().toLowerCase();
-        if (adminRepo.findByEmail(email) != null || clientRepo.findByEmail(email) != null || staffRepo.findByEmail(email) != null) {
+        if (adminRepo.findByEmail(email) != null) {
             response.put("status", "failed");
-            response.put("message", "An account with email " + email + " already exists in the system.");
+            response.put("message", "An administrator with email " + email + " already exists.");
             return ResponseEntity.badRequest().body(response);
         }
 
-        if (adminRepo.findByMobile(mobile) != null || clientRepo.findByMobile(mobile) != null || staffRepo.findByMobile(mobile) != null) {
+        if (adminRepo.findByMobile(mobile) != null) {
             response.put("status", "failed");
-            response.put("message", "An account with mobile number " + mobile + " already exists.");
+            response.put("message", "An administrator with mobile number " + mobile + " already exists.");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -792,6 +793,168 @@ public class AccessManagementController {
 
         response.put("status", "success");
         response.put("message", "Password updated successfully. Please use your new password next time you log in.");
+        return ResponseEntity.ok(response);
+    }
+
+    // =========================================================================
+    // 6B. STAFF PROFILE & CREDENTIAL MANAGEMENT
+    // =========================================================================
+
+    /**
+     * Get current authenticated Staff profile.
+     */
+    @GetMapping("/Staff/Profile")
+    public ResponseEntity<Object> getStaffProfile(@AuthenticationPrincipal AuthUser user) {
+        Map<String, Object> response = new HashMap<>();
+        if (user == null || user.getId() == null) {
+            response.put("status", "failed");
+            response.put("message", "Unauthorized session");
+            return ResponseEntity.status(401).body(response);
+        }
+
+        Staff staff = staffRepo.findById(user.getId()).orElse(null);
+        if (staff == null) {
+            response.put("status", "failed");
+            response.put("message", "Staff profile not found");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        response.put("status", "success");
+        response.put("id", staff.getId());
+        response.put("name", staff.getName());
+        response.put("email", staff.getEmail());
+        response.put("mobile", staff.getMobile());
+        response.put("designation", staff.getDesignation() != null ? staff.getDesignation() : "Audit Officer & Client Specialist");
+        response.put("role", staff.getRole());
+        response.put("active", staff.isActive());
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Update current authenticated Staff profile.
+     */
+    @PutMapping("/Staff/Profile")
+    public ResponseEntity<Object> updateStaffProfile(
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal AuthUser user) {
+        Map<String, Object> response = new HashMap<>();
+        if (user == null || user.getId() == null) {
+            response.put("status", "failed");
+            response.put("message", "Unauthorized session");
+            return ResponseEntity.status(401).body(response);
+        }
+
+        Staff staff = staffRepo.findById(user.getId()).orElse(null);
+        if (staff == null) {
+            response.put("status", "failed");
+            response.put("message", "Staff profile not found");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        String name = body.get("name");
+        String email = body.get("email");
+        String mobile = body.get("mobile");
+        String designation = body.get("designation");
+
+        if (name == null || name.trim().isEmpty()) {
+            response.put("status", "failed");
+            response.put("message", "Full name cannot be empty");
+            return ResponseEntity.badRequest().body(response);
+        }
+        if (email == null || email.trim().isEmpty()) {
+            response.put("status", "failed");
+            response.put("message", "Email address cannot be empty");
+            return ResponseEntity.badRequest().body(response);
+        }
+        if (mobile == null || mobile.trim().isEmpty()) {
+            response.put("status", "failed");
+            response.put("message", "Mobile number cannot be empty");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        String cleanEmail = email.trim().toLowerCase();
+        if (!cleanEmail.equalsIgnoreCase(staff.getEmail())) {
+            if (adminRepo.findByEmail(cleanEmail) != null || clientRepo.findByEmail(cleanEmail) != null || staffRepo.findByEmail(cleanEmail) != null) {
+                response.put("status", "failed");
+                response.put("message", "The email " + cleanEmail + " is already in use by another account.");
+                return ResponseEntity.badRequest().body(response);
+            }
+        }
+
+        String cleanMobile = mobile.trim();
+        if (!cleanMobile.equalsIgnoreCase(staff.getMobile())) {
+            if (adminRepo.findByMobile(cleanMobile) != null || clientRepo.findByMobile(cleanMobile) != null || staffRepo.findByMobile(cleanMobile) != null) {
+                response.put("status", "failed");
+                response.put("message", "The mobile number " + cleanMobile + " is already in use by another account.");
+                return ResponseEntity.badRequest().body(response);
+            }
+        }
+
+        staff.setName(name.trim());
+        staff.setEmail(cleanEmail);
+        staff.setMobile(cleanMobile);
+        if (designation != null && !designation.trim().isEmpty()) {
+            staff.setDesignation(designation.trim());
+        }
+
+        staffRepo.save(staff);
+
+        response.put("status", "success");
+        response.put("message", "Staff profile updated successfully!");
+        response.put("id", staff.getId());
+        response.put("name", staff.getName());
+        response.put("email", staff.getEmail());
+        response.put("mobile", staff.getMobile());
+        response.put("designation", staff.getDesignation());
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Update current Staff password.
+     */
+    @PutMapping("/Staff/Profile/Password")
+    public ResponseEntity<Object> updateStaffPassword(
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal AuthUser user) {
+        Map<String, Object> response = new HashMap<>();
+        if (user == null || user.getId() == null) {
+            response.put("status", "failed");
+            response.put("message", "Unauthorized session");
+            return ResponseEntity.status(401).body(response);
+        }
+
+        Staff staff = staffRepo.findById(user.getId()).orElse(null);
+        if (staff == null) {
+            response.put("status", "failed");
+            response.put("message", "Staff profile not found");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        String currentPassword = body.get("currentPassword");
+        String newPassword = body.get("newPassword");
+
+        if (currentPassword == null || currentPassword.isEmpty()) {
+            response.put("status", "failed");
+            response.put("message", "Please enter your current password");
+            return ResponseEntity.badRequest().body(response);
+        }
+        if (newPassword == null || newPassword.length() < 6) {
+            response.put("status", "failed");
+            response.put("message", "New password must be at least 6 characters long");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        if (!passwordEncoder.matches(currentPassword, staff.getPassword())) {
+            response.put("status", "failed");
+            response.put("message", "Current password does not match. Please verify and try again.");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        staff.setPassword(passwordEncoder.encode(newPassword));
+        staffRepo.save(staff);
+
+        response.put("status", "success");
+        response.put("message", "Password updated successfully!");
         return ResponseEntity.ok(response);
     }
 

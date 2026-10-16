@@ -133,10 +133,14 @@ public class RegisterController {
 		Client saved = clientRepo.save(client);
 
 		if (saved.getEmail() != null && !saved.getEmail().isBlank()) {
+			System.out.println(">>> [RegisterController] Dispatching welcome email to client: " + saved.getEmail());
+			String clientLoginId = saved.getMobile() != null && !saved.getMobile().isBlank()
+					? saved.getMobile() + " (or " + saved.getEmail() + ")"
+					: saved.getEmail();
 			emailService.sendAccountCreationWelcomeEmail(
 					saved.getEmail(),
-					saved.getName(),
-					saved.getMobile(),
+					saved.getName() != null ? saved.getName() : "Client",
+					clientLoginId,
 					password,
 					"CLIENT"
 			);

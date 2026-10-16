@@ -19,6 +19,7 @@ public class MembershipRequest {
     private String location;
     private String gstnumber;
     private String pannumber;
+    @Column(columnDefinition = "TEXT")
     private String message;
 
     // Plan selected by applicant: SILVER, GOLD, PLATINUM
@@ -31,6 +32,7 @@ public class MembershipRequest {
     private LocalDateTime processedAt;
 
     // Admin notes when approving/rejecting
+    @Column(columnDefinition = "TEXT")
     private String adminNote;
 
     // Whether QR was sent

@@ -91,6 +91,7 @@ public class MembershipController {
         if (request.getFullName() == null || request.getFullName().isBlank()) {
             request.setFullName(client.getName());
         }
+        request.setLinkedClientId(client.getId());
 
         MembershipRequest saved = membershipRepo.save(request);
 
@@ -187,7 +188,20 @@ public class MembershipController {
         int months = resolveDuration(planType);
 
         // Find or create client
-        Client client = clientRepo.findByEmail(req.getEmail());
+        Client client = null;
+        if (req.getLinkedClientId() != null) {
+            client = clientRepo.findById(req.getLinkedClientId()).orElse(null);
+        }
+        if (client == null && req.getEmail() != null) {
+            client = clientRepo.findByEmail(req.getEmail().trim());
+            if (client == null) {
+                client = clientRepo.findByEmail(req.getEmail().trim().toLowerCase());
+            }
+        }
+        if (client == null && req.getMobile() != null) {
+            client = clientRepo.findByMobile(req.getMobile().trim());
+        }
+
         if (client == null) {
             String tempPassword = req.getMobile().length() >= 4
                     ? req.getMobile().substring(req.getMobile().length() - 4) + "2024"
@@ -209,7 +223,10 @@ public class MembershipController {
         // Activate membership
         client.setMembershipStatus("MEMBER");
         client.setMembershipPlan(planType);
-        client.setMembershipExpiry(LocalDate.now().plusMonths(months));
+        LocalDate baseDate = (client.getMembershipExpiry() != null && client.getMembershipExpiry().isAfter(LocalDate.now()))
+                ? client.getMembershipExpiry()
+                : LocalDate.now();
+        client.setMembershipExpiry(baseDate.plusMonths(months));
         client.setMembershipActivatedAt(LocalDateTime.now());
         Client savedClient = clientRepo.save(client);
 
@@ -222,16 +239,20 @@ public class MembershipController {
         req.setLinkedClientId(savedClient.getId());
         membershipRepo.save(req);
 
-        // Send activation email to client
-        emailService.sendMembershipActivationEmail(
-            req.getEmail(), req.getFullName(), planType, months,
-            LocalDate.now().plusMonths(months).toString(), adminNote
-        );
+        // Send activation email to client safely
+        try {
+            emailService.sendMembershipActivationEmail(
+                req.getEmail(), req.getFullName(), planType, months,
+                client.getMembershipExpiry().toString(), adminNote
+            );
+        } catch (Exception ex) {
+            System.err.println("Activation email send notice: " + ex.getMessage());
+        }
 
         response.put("status", "success");
         response.put("message", "Membership activated! " + planType + " plan valid for " + months + " months.");
         response.put("clientId", savedClient.getId());
-        response.put("expiry", LocalDate.now().plusMonths(months).toString());
+        response.put("expiry", client.getMembershipExpiry().toString());
         return ResponseEntity.ok(response);
     }
 
@@ -254,11 +275,75 @@ public class MembershipController {
         res.put("membershipPlan", client.getMembershipPlan());
         res.put("membershipExpiry", client.getMembershipExpiry());
         res.put("membershipActivatedAt", client.getMembershipActivatedAt());
+        res.put("email", client.getEmail());
+        res.put("mobile", client.getMobile());
+        res.put("clientName", client.getName());
+        res.put("clientId", client.getId());
         boolean active = "MEMBER".equals(client.getMembershipStatus())
                 && client.getMembershipExpiry() != null
                 && !client.getMembershipExpiry().isBefore(LocalDate.now());
         res.put("isActive", active);
         return ResponseEntity.ok(res);
+    }
+
+    // ─── CLIENT: Authenticated Upgrade or Extension Request ───────────────────────
+    @PostMapping("/Client/Membership/UpgradeRequest")
+    public ResponseEntity<Object> clientUpgradeRequest(
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal AuthUser user) {
+        Map<String, Object> response = new HashMap<>();
+        if (user == null || user.getId() == null) {
+            response.put("status", "failed");
+            response.put("message", "Unauthorized session");
+            return ResponseEntity.status(401).body(response);
+        }
+
+        Client client = clientRepo.findById(user.getId()).orElse(null);
+        if (client == null) {
+            response.put("status", "failed");
+            response.put("message", "Client profile not found");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        String action = body.get("action") != null ? body.get("action").toString() : "UPGRADE";
+        String targetPlan = body.get("targetPlan") != null ? body.get("targetPlan").toString() : "PLATINUM";
+        String utr = body.get("utr") != null ? body.get("utr").toString() : "";
+        String note = body.get("note") != null ? body.get("note").toString() : "";
+        int durationMonths = body.get("durationMonths") != null 
+                ? Integer.parseInt(body.get("durationMonths").toString()) 
+                : resolveDuration(targetPlan);
+
+        // Find existing PENDING request or create new
+        List<MembershipRequest> existing = membershipRepo.findByEmailAndStatus(client.getEmail(), "PENDING");
+        MembershipRequest req;
+        if (!existing.isEmpty()) {
+            req = existing.get(0);
+        } else {
+            req = new MembershipRequest();
+        }
+
+        req.setFullName(client.getName());
+        req.setEmail(client.getEmail());
+        req.setMobile(client.getMobile());
+        req.setBusinessName(client.getLegalname() != null ? client.getLegalname() : client.getName());
+        req.setPlanType(targetPlan);
+        req.setStatus("PENDING");
+        req.setLinkedClientId(client.getId());
+        req.setMessage(String.format("[%s REQUEST] Current: %s. Target: %s (%d Months). UTR/Ref: %s. Note: %s",
+                action, client.getMembershipPlan() != null ? client.getMembershipPlan() : "NONE", targetPlan, durationMonths, utr, note));
+        MembershipRequest saved = membershipRepo.save(req);
+
+        // Notify admins in portal
+        notificationService.notifyAllAdmins(
+            "MEMBERSHIP_REQUEST",
+            "Membership " + ("EXTEND".equalsIgnoreCase(action) ? "Extension" : "Upgrade") + " Request",
+            client.getName() + " requested " + action + " to " + targetPlan + " (" + durationMonths + " months)",
+            saved.getId()
+        );
+
+        response.put("status", "success");
+        response.put("message", "Your " + action.toLowerCase() + " request has been received. Our team will verify and activate your privileges.");
+        return ResponseEntity.ok(response);
     }
 
     // ─── ADMIN: Get / Update membership plan settings ────────────────────────────

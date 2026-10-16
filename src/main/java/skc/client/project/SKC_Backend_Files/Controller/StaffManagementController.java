@@ -53,6 +53,7 @@ public class StaffManagementController {
         Staff saved = staffRepo.save(staff);
 
         if (saved.getEmail() != null && !saved.getEmail().isBlank()) {
+            System.out.println(">>> [StaffManagementController] Dispatching welcome email to staff: " + saved.getEmail());
             emailService.sendAccountCreationWelcomeEmail(
                     saved.getEmail(),
                     saved.getName() != null ? saved.getName() : "Staff Member",

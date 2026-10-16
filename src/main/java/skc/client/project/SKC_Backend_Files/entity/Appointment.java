@@ -22,7 +22,7 @@ public class Appointment {
     private String appointmentType;
 
     // Requested date/time by client
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd['T'][ ]HH:mm[:ss]")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime requestedDateTime;
 
     // Status: PENDING, CONFIRMED, CANCELLED, COMPLETED
@@ -40,7 +40,10 @@ public class Appointment {
     // Notes from admin/staff
     private String adminNote;
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime updatedAt;
 
     @PrePersist

@@ -682,6 +682,7 @@ public class EmailService {
             sendHtmlEmail(toEmail, "🎉 Welcome to Sri Kathiravan & Co. – Your Account Credentials & Access Details", html);
         } catch (Exception e) {
             System.err.println("Failed to dispatch welcome email to " + toEmail + ": " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
