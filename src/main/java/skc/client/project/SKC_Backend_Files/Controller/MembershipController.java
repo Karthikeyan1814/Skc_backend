@@ -6,12 +6,14 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import skc.client.project.SKC_Backend_Files.Repo.ClientRepo;
+import skc.client.project.SKC_Backend_Files.Repo.FirmSettingsRepo;
 import skc.client.project.SKC_Backend_Files.Repo.MembershipPlanRepo;
 import skc.client.project.SKC_Backend_Files.Repo.MembershipRequestRepo;
 import skc.client.project.SKC_Backend_Files.Service.EmailService;
 import skc.client.project.SKC_Backend_Files.Service.NotificationService;
 import skc.client.project.SKC_Backend_Files.Wrapper.AuthUser;
 import skc.client.project.SKC_Backend_Files.entity.Client;
+import skc.client.project.SKC_Backend_Files.entity.FirmSettings;
 import skc.client.project.SKC_Backend_Files.entity.MembershipPlan;
 import skc.client.project.SKC_Backend_Files.entity.MembershipRequest;
 
@@ -28,6 +30,7 @@ public class MembershipController {
     @Autowired private MembershipRequestRepo membershipRepo;
     @Autowired private ClientRepo clientRepo;
     @Autowired private MembershipPlanRepo planRepo;
+    @Autowired private FirmSettingsRepo firmRepo;
     @Autowired private EmailService emailService;
     @Autowired private NotificationService notificationService;
     @Autowired private PasswordEncoder passwordEncoder;
@@ -53,7 +56,7 @@ public class MembershipController {
         Map<String, Object> res = new HashMap<>();
         try {
             emailService.sendMembershipActivationEmail(
-                to, "Karthikeyan", "GOLD", 6, LocalDate.now().plusMonths(6).toString(), "This is a verified test sample email from Sri Kathiravan & Co Portal"
+                to, "Kathiravan & Co. Member", "GOLD", 6, LocalDate.now().plusMonths(6).toString(), "This is a verified test sample email from Sri Kathiravan & Co Portal"
             );
             res.put("status", "dispatched");
             res.put("recipient", to);
@@ -203,9 +206,7 @@ public class MembershipController {
         }
 
         if (client == null) {
-            String tempPassword = req.getMobile().length() >= 4
-                    ? req.getMobile().substring(req.getMobile().length() - 4) + "2024"
-                    : "skc2024";
+            String tempPassword = "kathiravan&co";
             client = new Client();
             client.setName(req.getFullName());
             client.setEmail(req.getEmail());
@@ -346,12 +347,41 @@ public class MembershipController {
         return ResponseEntity.ok(response);
     }
 
+    // ─── GLOBAL MEMBERSHIP MASTER TOGGLE (ADMIN & PUBLIC STATUS) ─────────────────
+    @GetMapping("/Public/Membership/GlobalSettings")
+    public ResponseEntity<Object> getGlobalMembershipSettings() {
+        FirmSettings firm = firmRepo.findById(1L).orElseGet(() -> firmRepo.save(new FirmSettings()));
+        Map<String, Object> res = new HashMap<>();
+        res.put("membershipEnabled", Boolean.TRUE.equals(firm.getMembershipEnabled()));
+        return ResponseEntity.ok(res);
+    }
+
+    @PostMapping("/Admin/Membership/ToggleMaster")
+    public ResponseEntity<Object> toggleMembershipMaster(@RequestBody(required = false) Map<String, Object> body) {
+        FirmSettings firm = firmRepo.findById(1L).orElseGet(() -> firmRepo.save(new FirmSettings()));
+        boolean newState;
+        if (body != null && body.containsKey("enabled")) {
+            newState = Boolean.TRUE.equals(body.get("enabled"));
+        } else {
+            newState = !Boolean.TRUE.equals(firm.getMembershipEnabled());
+        }
+        firm.setMembershipEnabled(newState);
+        firmRepo.save(firm);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("status", "success");
+        res.put("membershipEnabled", newState);
+        res.put("message", newState ? "Membership system has been ACTIVATED" : "Membership system has been DEACTIVATED (Initial Launch Mode)");
+        return ResponseEntity.ok(res);
+    }
+
     // ─── ADMIN: Get / Update membership plan settings ────────────────────────────
     @GetMapping("/Admin/Membership/Plans")
     public ResponseEntity<List<MembershipPlan>> getPlans() {
+        // Ensure legacy SILVER is permanently removed
+        planRepo.findByPlanTier("SILVER").ifPresent(planRepo::delete);
         List<MembershipPlan> plans = planRepo.findAll();
         if (plans.isEmpty()) {
-            // seed defaults
             plans = seedDefaultPlans();
         }
         return ResponseEntity.ok(plans);
@@ -359,7 +389,11 @@ public class MembershipController {
 
     @PutMapping("/Admin/Membership/Plans")
     public ResponseEntity<Object> updatePlans(@RequestBody List<MembershipPlan> plans) {
-        planRepo.saveAll(plans);
+        // Ensure legacy SILVER is filtered out
+        List<MembershipPlan> validPlans = plans.stream()
+                .filter(p -> !"SILVER".equalsIgnoreCase(p.getPlanTier()))
+                .toList();
+        planRepo.saveAll(validPlans);
         return ResponseEntity.ok(Map.of("status", "success", "message", "Plans updated successfully"));
     }
 
@@ -367,6 +401,9 @@ public class MembershipController {
     public ResponseEntity<Object> updateSinglePlan(
             @PathVariable String tier,
             @RequestBody MembershipPlan plan) {
+        if ("SILVER".equalsIgnoreCase(tier)) {
+            return ResponseEntity.badRequest().body(Map.of("status", "failed", "message", "Silver tier is deprecated and removed."));
+        }
         MembershipPlan existing = planRepo.findByPlanTier(tier.toUpperCase()).orElse(new MembershipPlan());
         existing.setPlanTier(tier.toUpperCase());
         existing.setDisplayName(plan.getDisplayName());
@@ -387,27 +424,26 @@ public class MembershipController {
 
     // ─── Helpers ─────────────────────────────────────────────────────────────────
     private int resolveDuration(String planType) {
-        if (planType == null) return 1;
-        return switch (planType.toUpperCase()) {
-            case "GOLD" -> 6;
-            case "PLATINUM" -> 12;
-            default -> 1; // SILVER
-        };
+        if (planType == null) return 6;
+        return planRepo.findByPlanTier(planType.toUpperCase())
+                .map(MembershipPlan::getDurationMonths)
+                .orElse(switch (planType.toUpperCase()) {
+                    case "PLATINUM" -> 12;
+                    default -> 6;
+                });
     }
 
     private List<MembershipPlan> seedDefaultPlans() {
-        MembershipPlan silver = new MembershipPlan();
-        silver.setPlanTier("SILVER"); silver.setDisplayName("Silver"); silver.setDurationMonths(1);
-        silver.setPrice(299.0); silver.setFeatures("24/7 Support,GST Guidance,Priority Response");
+        planRepo.findByPlanTier("SILVER").ifPresent(planRepo::delete);
 
         MembershipPlan gold = new MembershipPlan();
         gold.setPlanTier("GOLD"); gold.setDisplayName("Gold"); gold.setDurationMonths(6);
-        gold.setPrice(699.0); gold.setFeatures("All Silver,Document Support,Live Chat,File Access");
+        gold.setPrice(699.0); gold.setFeatures("Free File & Invoice Hub,Free Appointment Booking,Priority Messages to Admin,Live Chat Support,Document Review");
 
         MembershipPlan platinum = new MembershipPlan();
         platinum.setPlanTier("PLATINUM"); platinum.setDisplayName("Platinum"); platinum.setDurationMonths(12);
-        platinum.setPrice(999.0); platinum.setFeatures("All Gold,1-on-1 Meetings,Unlimited File Downloads,Compliance Reminders");
+        platinum.setPrice(999.0); platinum.setFeatures("All Features Unlocked,Dedicated CA Manager,1-on-1 Video Consultations,Expedited Filing,Priority SCN Defense");
 
-        return planRepo.saveAll(List.of(silver, gold, platinum));
+        return planRepo.saveAll(List.of(gold, platinum));
     }
 }

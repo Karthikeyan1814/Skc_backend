@@ -50,6 +50,9 @@ public class SecurityConfig {
                     // Staff routes (admin can also access)
                     auth.requestMatchers("/skc/Staff/**").hasAnyRole("ADMIN", "STAFF");
 
+                    // Client billing routes (Strictly Admin and Client only - Staff completely excluded)
+                    auth.requestMatchers("/skc/Client/Billing/**").hasAnyRole("ADMIN", "CLIENT");
+
                     // Client routes
                     auth.requestMatchers("/skc/Client/**").hasAnyRole("ADMIN", "STAFF", "CLIENT");
 

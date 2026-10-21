@@ -8,6 +8,8 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import skc.client.project.SKC_Backend_Files.entity.BillingDocument;
+import skc.client.project.SKC_Backend_Files.entity.FirmSettings;
 
 @Service
 public class EmailService {
@@ -84,6 +86,68 @@ public class EmailService {
             sendHtmlEmail(to, "File Expiry Notice – " + fileName, html);
         } catch (Exception e) {
             System.err.println("Failed to send file expiry email: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Sends document to a receiver with optional custom note and attached file data.
+     */
+    public void sendDocumentEmailWithAttachment(String to, String subject, String messageText, String fileName, byte[] fileData, String contentType) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(to);
+            helper.setSubject(subject != null && !subject.isBlank() ? subject : "Document from Sri Kathiravan & Co – " + fileName);
+
+            String customMsgBlock = (messageText != null && !messageText.isBlank()) ?
+                    "<div style=\"background:#f1f5f9;padding:12px 16px;border-radius:8px;margin:16px 0;font-size:13px;color:#334155;\"><strong>Message:</strong> " + messageText + "</div>" : "";
+
+            String html = """
+                    <!DOCTYPE html>
+                    <html>
+                    <body style="font-family: Arial, sans-serif; background:#f4f4f4; padding:20px;">
+                      <div style="max-width:600px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+                        <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);padding:26px;text-align:center;">
+                          <h1 style="color:#f59e0b;margin:0;font-size:22px;">Sri Kathiravan & Co</h1>
+                          <p style="color:#cbd5e1;margin:6px 0 0;font-size:13px;">Document Distribution Service</p>
+                        </div>
+                        <div style="padding:28px;">
+                          <h2 style="color:#1e293b;margin-top:0;font-size:18px;">Official Document Shared with You</h2>
+                          <p style="color:#475569;line-height:1.6;font-size:14px;">
+                            Please find the attached document: <strong style="color:#1e1b4b;">%s</strong>
+                          </p>
+                          %s
+                          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #4f46e5;padding:14px;border-radius:6px;margin:20px 0;">
+                            <p style="margin:0;color:#334155;font-size:13px;">
+                              <strong>Attachment:</strong> %s<br>
+                              <span style="color:#64748b;font-size:12px;">The file has been attached directly to this email for your reference and auditing records.</span>
+                            </p>
+                          </div>
+                          <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;">
+                          <p style="color:#94a3b8;font-size:12px;text-align:center;margin:0;">
+                            Sri Kathiravan & Co | Chartered Accountants<br>
+                            This email was generated automatically by our official document management portal.
+                          </p>
+                        </div>
+                      </div>
+                    </body>
+                    </html>
+                    """.formatted(fileName, customMsgBlock, fileName);
+
+            helper.setText(html, true);
+
+            if (fileData != null && fileData.length > 0) {
+                org.springframework.core.io.ByteArrayResource resource = new org.springframework.core.io.ByteArrayResource(fileData);
+                helper.addAttachment(fileName, resource, contentType != null ? contentType : "application/octet-stream");
+            }
+
+            mailSender.send(message);
+            System.out.println(">>> [EmailService] Document email delivered to " + to);
+        } catch (Exception e) {
+            System.err.println("Failed to send document email: " + e.getMessage());
+            throw new RuntimeException("Failed to send email: " + e.getMessage(), e);
         }
     }
 
@@ -267,9 +331,59 @@ public class EmailService {
                 </body>
                 </html>
                 """.formatted(clientName, email, mobile != null ? mobile : "N/A", plan);
-            sendHtmlEmail(adminEmail, "[SKC Portal] New Membership Request – " + clientName, html);
+            sendHtmlEmail(adminEmail, "[Sri Kathiravan & Co.] New Membership Request – " + clientName, html);
         } catch (Exception e) {
             System.err.println("Failed to send admin alert: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Sends OTP to Admin's email whenever a staff member attempts to log in.
+     */
+    public void sendStaffLoginAdminOtp(String adminEmail, String staffName, String staffEmail, String staffMobile, String otp) {
+        try {
+            String html = """
+                <!DOCTYPE html>
+                <html>
+                <body style="font-family: 'Segoe UI', Arial, sans-serif; background:#f1f5f9; padding:20px; color:#0f172a; margin:0;">
+                  <div style="max-width:540px; margin:0 auto; background:#ffffff; border-radius:14px; overflow:hidden; border:1px solid #cbd5e1; box-shadow:0 8px 24px rgba(15,23,42,0.08);">
+                    <div style="background:linear-gradient(135deg, #1e3a8a, #2563eb); padding:24px 28px; text-align:left; color:#ffffff;">
+                      <div style="display:inline-block; background:rgba(255,255,255,0.2); padding:4px 12px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:0.5px; margin-bottom:8px;">
+                        SECURITY AUTHORIZATION DESK
+                      </div>
+                      <h2 style="margin:0; font-size:20px; font-weight:800;">🔐 Staff Login Authorization Required</h2>
+                    </div>
+
+                    <div style="padding:26px 28px;">
+                      <p style="font-size:14px; color:#334155; margin:0 0 16px 0;">
+                        Hello <strong>Administrator</strong>,
+                      </p>
+                      <p style="font-size:13.5px; color:#475569; line-height:1.6; margin:0 0 18px 0;">
+                        Staff member <strong>%s</strong> (Email: %s | Mobile: %s) has verified their credentials and is requesting entry to the Sri Kathiravan & Co. Staff Portal. To authorize this login, provide the following one-time code to the staff member:
+                      </p>
+
+                      <div style="background:#f8fafc; border:2px dashed #3b82f6; border-radius:12px; padding:18px; text-align:center; margin:18px 0;">
+                        <span style="font-size:11.5px; font-weight:700; color:#64748b; letter-spacing:1px; text-transform:uppercase;">Admin Staff Authorization Code</span>
+                        <div style="font-size:34px; font-weight:900; letter-spacing:8px; color:#1e3a8a; margin:8px 0;">
+                          %s
+                        </div>
+                        <span style="font-size:11.5px; color:#dc2626; font-weight:700;">Valid for 10 minutes &bull; Single-use only</span>
+                      </div>
+
+                      <div style="font-size:12px; color:#64748b; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:12px; margin-top:16px; line-height:1.5;">
+                        ⚠️ <strong>Security Caution:</strong> Only share this OTP with staff member <strong>%s</strong> if you explicitly approve their current access to client files and documents.
+                      </div>
+                    </div>
+                  </div>
+                </body>
+                </html>
+                """.formatted(staffName, staffEmail != null ? staffEmail : "N/A", staffMobile != null ? staffMobile : "N/A", otp, staffName);
+
+            sendHtmlEmail(adminEmail, "🔐 [Action Required] Staff Login Authorization OTP: " + otp + " – " + staffName, html);
+            System.out.println(">>> [EmailService] Staff login OTP dispatched to Admin (" + adminEmail + ") for staff: " + staffName);
+        } catch (Exception e) {
+            System.err.println("Failed to send staff login admin OTP: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -729,7 +843,7 @@ public class EmailService {
                         </a>
                       </div>
                       <p style="font-size:12px; color:#94a3b8; text-align:center; margin:0;">
-                        Helpline: +91 8807836326 &bull; Email: info@skctaxconsultants.com
+                        Helpline: +91 8807836326 &bull; Email: info@srikathiravan.com
                       </p>
                     </div>
                   </div>
@@ -775,7 +889,7 @@ public class EmailService {
                         Our advisory team will review your requested slot and will send you an official confirmation with the meeting room link / office desk details shortly.
                       </p>
                       <div style="background:#f8fafc; border-radius:8px; padding:12px 16px; font-size:12px; color:#64748b; text-align:center;">
-                        Direct Assistance: +91 8807836326 &bull; Email: info@skctaxconsultants.com
+                        Direct Assistance: +91 8807836326 &bull; Email: info@srikathiravan.com
                       </div>
                     </div>
                   </div>
@@ -788,5 +902,168 @@ public class EmailService {
             System.err.println("Failed to send guest appointment acknowledgement to " + to + ": " + e.getMessage());
         }
     }
+
+    /**
+     * Sends official invoice or payment receipt notification to client's email upon filing.
+     */
+    public void sendInvoiceNotificationEmail(BillingDocument doc, FirmSettings firm) {
+        if (doc == null || doc.getClientEmail() == null || !doc.getClientEmail().contains("@")) {
+            return;
+        }
+
+        try {
+            String to = doc.getClientEmail().trim();
+            boolean isReceipt = "RECEIPT".equalsIgnoreCase(doc.getType());
+            String firmName = (firm != null && firm.getName() != null) ? firm.getName() : "Sri Kathiravan & Co.";
+            String docTitle = isReceipt ? "Official Payment Receipt" : "Official Tax Invoice";
+            String docNumber = doc.getDocNumber() != null ? doc.getDocNumber() : "DOC";
+            String subject = String.format("📄 %s (%s) – %s", docTitle, docNumber, firmName);
+
+            String clientName = doc.getClientName() != null ? doc.getClientName() : "Valued Client";
+            String clientLegalName = doc.getClientLegalName() != null ? doc.getClientLegalName() : clientName;
+            String date = doc.getDocDate() != null ? doc.getDocDate() : "";
+            String dueDate = doc.getDueDate() != null ? doc.getDueDate() : "Immediate";
+            double totalAmount = doc.getTotalAmount() != null ? doc.getTotalAmount() : 0.0;
+            double paidAmount = doc.getPaidAmount() != null ? doc.getPaidAmount() : 0.0;
+            double remainingDue = doc.getRemainingBalance() != null ? Math.max(0.0, doc.getRemainingBalance()) : 0.0;
+
+            String bankName = (firm != null && firm.getBankName() != null) ? firm.getBankName() : "HDFC Bank Ltd";
+            String accountName = (firm != null && firm.getAccountName() != null) ? firm.getAccountName() : "Sri Kathiravan & Co.";
+            String accountNo = (firm != null && firm.getAccountNumber() != null) ? firm.getAccountNumber() : "50200084729103";
+            String ifsc = (firm != null && firm.getIfscCode() != null) ? firm.getIfscCode() : "HDFC0001234";
+            String branch = (firm != null && firm.getBranch() != null) ? firm.getBranch() : "Salem Main Branch";
+            String upiId = (firm != null && firm.getUpiId() != null) ? firm.getUpiId() : "8825750992@upi";
+            String firmPhone = (firm != null && firm.getPhone() != null) ? firm.getPhone() : "+91 88257 50992";
+            String firmEmail = (firm != null && firm.getEmail() != null) ? firm.getEmail() : "contact@srikathiravan.com";
+
+            String headerBg = isReceipt ? "linear-gradient(135deg, #065f46, #059669)" : "linear-gradient(135deg, #1e3a8a, #2563eb)";
+            String badgeBg = isReceipt ? "#059669" : "#2563eb";
+
+            String html = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                  <meta charset="utf-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                </head>
+                <body style="font-family: 'Segoe UI', Arial, sans-serif; background:#f1f5f9; padding:20px; color:#0f172a; margin:0;">
+                  <div style="max-width:620px; margin:0 auto; background:#ffffff; border-radius:14px; overflow:hidden; border:1px solid #cbd5e1; box-shadow:0 8px 24px rgba(15,23,42,0.08);">
+                    <!-- Header -->
+                    <div style="background:%s; padding:26px 30px; text-align:left; color:#ffffff;">
+                      <div style="display:inline-block; background:rgba(255,255,255,0.2); padding:4px 12px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:0.5px; margin-bottom:8px;">
+                        %s
+                      </div>
+                      <h2 style="margin:0; font-size:22px; font-weight:800; letter-spacing:-0.5px;">%s</h2>
+                      <p style="margin:4px 0 0; font-size:12px; opacity:0.9;">Document Ref: <strong>%s</strong> &bull; Date: %s</p>
+                    </div>
+
+                    <div style="padding:28px 30px;">
+                      <p style="font-size:14.5px; color:#334155; margin:0 0 16px 0;">
+                        Dear <strong>%s</strong> (%s),
+                      </p>
+                      <p style="font-size:13.5px; color:#475569; line-height:1.6; margin:0 0 20px 0;">
+                        We have successfully processed and filed your <strong>%s</strong> in our official records. You can view, track, and download the full signed document anytime in your Client Portal.
+                      </p>
+
+                      <!-- Financial Summary Card -->
+                      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:18px 20px; margin-bottom:24px;">
+                        <h4 style="margin:0 0 12px 0; font-size:13px; text-transform:uppercase; letter-spacing:0.5px; color:#64748b;">Financial Summary</h4>
+                        <table style="width:100%%; font-size:13.5px; border-collapse:collapse;">
+                          <tr>
+                            <td style="padding:6px 0; color:#475569;">Total Billed Amount:</td>
+                            <td style="padding:6px 0; text-align:right; font-weight:700; color:#0f172a;">₹ %,.2f</td>
+                          </tr>
+                          <tr>
+                            <td style="padding:6px 0; color:#475569;">Amount Paid / Cleared:</td>
+                            <td style="padding:6px 0; text-align:right; font-weight:700; color:#16a34a;">₹ %,.2f</td>
+                          </tr>
+                          <tr style="border-top:1px dashed #cbd5e1;">
+                            <td style="padding:10px 0 4px; font-size:15px; font-weight:800; color:#0f172a;">Remaining Balance Due:</td>
+                            <td style="padding:10px 0 4px; text-align:right; font-size:16px; font-weight:900; color:%s;">₹ %,.2f</td>
+                          </tr>
+                          <tr>
+                            <td style="padding:2px 0; font-size:11.5px; color:#64748b;">Due Date:</td>
+                            <td style="padding:2px 0; text-align:right; font-size:12px; font-weight:600; color:#64748b;">%s</td>
+                          </tr>
+                        </table>
+                      </div>
+
+                      <!-- Remittance Details -->
+                      <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:12px; padding:18px 20px; margin-bottom:24px;">
+                        <h4 style="margin:0 0 10px 0; font-size:13px; color:#065f46; font-weight:800;">🏦 Official Authorized Remittance Channels</h4>
+                        <table style="width:100%%; font-size:12.5px; color:#065f46; line-height:1.7;">
+                          <tr>
+                            <td style="width:40%%; font-weight:600;">Beneficiary Bank:</td>
+                            <td><strong>%s</strong> (%s)</td>
+                          </tr>
+                          <tr>
+                            <td style="font-weight:600;">Account Name:</td>
+                            <td><strong>%s</strong></td>
+                          </tr>
+                          <tr>
+                            <td style="font-weight:600;">Account Number:</td>
+                            <td><strong style="color:#1e3a8a; font-size:14px; letter-spacing:0.5px;">%s</strong></td>
+                          </tr>
+                          <tr>
+                            <td style="font-weight:600;">IFSC Code:</td>
+                            <td><strong>%s</strong></td>
+                          </tr>
+                          <tr>
+                            <td style="font-weight:600;">Official UPI ID:</td>
+                            <td><strong style="color:#047857; font-size:13.5px;">%s</strong></td>
+                          </tr>
+                        </table>
+                      </div>
+
+                      <!-- Action Button -->
+                      <div style="text-align:center; margin:28px 0 16px;">
+                        <p style="font-size:12.5px; color:#64748b; margin-bottom:12px;">Login to your client dashboard to view your complete billing ledger and print tax invoices:</p>
+                        <a href="http://localhost:5173/Client/Billing" style="background:%s; color:#ffffff; padding:12px 28px; border-radius:8px; text-decoration:none; font-size:14px; font-weight:700; display:inline-block; box-shadow:0 4px 14px rgba(37,99,235,0.3);">
+                          View in Client Portal &rarr;
+                        </a>
+                      </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:16px 30px; font-size:11.5px; color:#64748b; text-align:center;">
+                      <p style="margin:2px 0;"><strong>%s</strong> &bull; Phone: %s &bull; Email: %s</p>
+                      <p style="margin:2px 0;">This is an automated legal financial statement. Computer generated document.</p>
+                    </div>
+                  </div>
+                </body>
+                </html>
+                """.formatted(
+                    headerBg,
+                    docTitle.toUpperCase(),
+                    firmName,
+                    docNumber,
+                    date,
+                    clientName,
+                    clientLegalName,
+                    docTitle,
+                    totalAmount,
+                    paidAmount,
+                    remainingDue <= 0 ? "#16a34a" : "#dc2626",
+                    remainingDue,
+                    dueDate,
+                    bankName,
+                    branch,
+                    accountName,
+                    accountNo,
+                    ifsc,
+                    upiId,
+                    badgeBg,
+                    firmName,
+                    firmPhone,
+                    firmEmail
+                );
+
+            sendHtmlEmail(to, subject, html);
+            System.out.println(">>> [EmailService] Invoice/Receipt email delivered to " + to + " for " + docNumber);
+        } catch (Exception e) {
+            System.err.println("Failed to send invoice email to " + doc.getClientEmail() + ": " + e.getMessage());
+        }
+    }
 }
+
 

@@ -10,12 +10,14 @@ import org.springframework.web.bind.annotation.*;
 import skc.client.project.SKC_Backend_Files.Repo.AdminRepo;
 import skc.client.project.SKC_Backend_Files.Repo.ClientRepo;
 import skc.client.project.SKC_Backend_Files.Repo.FileRepo;
+import skc.client.project.SKC_Backend_Files.Repo.FolderRepo;
 import skc.client.project.SKC_Backend_Files.Repo.StaffRepo;
 import skc.client.project.SKC_Backend_Files.Service.NotificationService;
 import skc.client.project.SKC_Backend_Files.Wrapper.AuthUser;
 import skc.client.project.SKC_Backend_Files.entity.Admin;
 import skc.client.project.SKC_Backend_Files.entity.Client;
 import skc.client.project.SKC_Backend_Files.entity.FileEntity;
+import skc.client.project.SKC_Backend_Files.entity.FolderEntity;
 import skc.client.project.SKC_Backend_Files.entity.Staff;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
@@ -29,7 +31,9 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
+import skc.client.project.SKC_Backend_Files.Service.EmailService;
 
 @RestController
 @RequestMapping("/skc")
@@ -38,10 +42,12 @@ public class FileManagementController {
     @Autowired private S3Client s3Client;
     @Autowired private S3Presigner s3Presigner;
     @Autowired private FileRepo fileRepo;
+    @Autowired private FolderRepo folderRepo;
     @Autowired private ClientRepo clientRepo;
     @Autowired private AdminRepo adminRepo;
     @Autowired private StaffRepo staffRepo;
     @Autowired private NotificationService notificationService;
+    @Autowired private EmailService emailService;
 
     @Value("${aws.bucketName}")
     private String bucketName;
@@ -248,6 +254,14 @@ public class FileManagementController {
             direction = "PERSONAL";
         }
 
+        Long folderId = null;
+        if (body.get("folderId") != null && !body.get("folderId").toString().isEmpty()) {
+            try {
+                folderId = Long.valueOf(body.get("folderId").toString());
+            } catch (Exception ignored) {}
+        }
+        String folderName = (String) body.get("folderName");
+
         PutObjectRequest putRequest = PutObjectRequest.builder()
                 .bucket(bucketName)
                 .key(objectKey)
@@ -274,6 +288,22 @@ public class FileManagementController {
         fileEntity.setStatus("PENDING");
         fileEntity.setClient(client);
 
+        if (folderId != null) {
+            FolderEntity f = folderRepo.findById(folderId).orElse(null);
+            if (f != null) {
+                fileEntity.setFolderId(f.getId());
+                fileEntity.setFolderName(f.getFolderName());
+            } else if (folderName != null && !folderName.trim().isEmpty()) {
+                fileEntity.setFolderName(folderName.trim());
+            } else {
+                fileEntity.setFolderName("General");
+            }
+        } else if (folderName != null && !folderName.trim().isEmpty()) {
+            fileEntity.setFolderName(folderName.trim());
+        } else {
+            fileEntity.setFolderName("General");
+        }
+
         if (expirationDateStr != null && !expirationDateStr.isEmpty()) {
             fileEntity.setExpirationDate(LocalDate.parse(expirationDateStr));
         }
@@ -284,6 +314,8 @@ public class FileManagementController {
         response.put("uploadUrl", uploadUrl);
         response.put("objectKey", objectKey);
         response.put("fileId", saved.getId());
+        response.put("folderId", saved.getFolderId());
+        response.put("folderName", saved.getFolderName());
         return ResponseEntity.ok(response);
     }
 
@@ -297,9 +329,11 @@ public class FileManagementController {
             @RequestParam(value = "targetAudience", required = false, defaultValue = "CLIENT") String targetAudience,
             @RequestParam(value = "customFileName", required = false) String customFileName,
             @RequestParam(value = "fileName", required = false) String fileNameParam,
+            @RequestParam(value = "folderId", required = false) Long folderId,
+            @RequestParam(value = "folderName", required = false) String folderNameParam,
             @AuthenticationPrincipal AuthUser user) {
         String finalName = (customFileName != null && !customFileName.trim().isEmpty()) ? customFileName : fileNameParam;
-        return doDirectUpload(file, clientId, category, expirationDate, targetAudience, finalName, user);
+        return doDirectUpload(file, clientId, category, expirationDate, targetAudience, finalName, folderId, folderNameParam, user);
     }
 
     @PostMapping(value = "/Staff/FileManagement/Upload", consumes = {"multipart/form-data"})
@@ -311,9 +345,11 @@ public class FileManagementController {
             @RequestParam(value = "targetAudience", required = false, defaultValue = "CLIENT") String targetAudience,
             @RequestParam(value = "customFileName", required = false) String customFileName,
             @RequestParam(value = "fileName", required = false) String fileNameParam,
+            @RequestParam(value = "folderId", required = false) Long folderId,
+            @RequestParam(value = "folderName", required = false) String folderNameParam,
             @AuthenticationPrincipal AuthUser user) {
         String finalName = (customFileName != null && !customFileName.trim().isEmpty()) ? customFileName : fileNameParam;
-        return doDirectUpload(file, clientId, category, expirationDate, targetAudience, finalName, user);
+        return doDirectUpload(file, clientId, category, expirationDate, targetAudience, finalName, folderId, folderNameParam, user);
     }
 
     private ResponseEntity<Object> doDirectUpload(
@@ -323,6 +359,8 @@ public class FileManagementController {
             String expirationDateStr,
             String targetAudience,
             String customFileName,
+            Long folderId,
+            String folderNameParam,
             AuthUser user) {
         Map<String, Object> response = new HashMap<>();
         try {
@@ -396,6 +434,22 @@ public class FileManagementController {
             fileEntity.setStatus("ACTIVE");
             fileEntity.setClient(client);
 
+            if (folderId != null) {
+                FolderEntity folder = folderRepo.findById(folderId).orElse(null);
+                if (folder != null) {
+                    fileEntity.setFolderId(folder.getId());
+                    fileEntity.setFolderName(folder.getFolderName());
+                } else if (folderNameParam != null && !folderNameParam.trim().isEmpty()) {
+                    fileEntity.setFolderName(folderNameParam.trim());
+                } else {
+                    fileEntity.setFolderName("General");
+                }
+            } else if (folderNameParam != null && !folderNameParam.trim().isEmpty()) {
+                fileEntity.setFolderName(folderNameParam.trim());
+            } else {
+                fileEntity.setFolderName("General");
+            }
+
             if (expirationDateStr != null && !expirationDateStr.trim().isEmpty()) {
                 fileEntity.setExpirationDate(LocalDate.parse(expirationDateStr.trim()));
             }
@@ -430,6 +484,8 @@ public class FileManagementController {
             fileMap.put("uploadedByRole", saved.getUploadedByRole());
             fileMap.put("direction", saved.getDirection());
             fileMap.put("status", saved.getStatus());
+            fileMap.put("folderId", saved.getFolderId());
+            fileMap.put("folderName", saved.getFolderName());
             fileMap.put("canRename", true);
             fileMap.put("canDelete", true);
 
@@ -537,10 +593,32 @@ public class FileManagementController {
         return updateExpiry(fileId, body);
     }
 
-    // ─── STAFF: Download file ─────────────────────────────────────────────────────
+    // ─── STAFF: Download file (BLOCKED per client data protection policy) ─────────
     @GetMapping("/Staff/Files/{fileId}/Download")
     public ResponseEntity<Object> staffDownloadFile(@PathVariable Long fileId) {
-        return adminDownloadFile(fileId);
+        Map<String, Object> res = new HashMap<>();
+        res.put("status", "failed");
+        res.put("message", "Staff members are restricted from downloading client files. Please use the View feature to inspect the document.");
+        return ResponseEntity.status(403).body(res);
+    }
+
+    // ─── VIEW FILE INLINE (PDF / Images / Docs / Public Shared Links) ───────────
+    @GetMapping({"/Staff/Files/{fileId}/View", "/Admin/Files/{fileId}/View", "/Client/Files/{fileId}/View", "/Public/Files/{fileId}/View", "/Public/Files/{fileId}/Download"})
+    public ResponseEntity<Object> viewFileInline(@PathVariable Long fileId) {
+        FileEntity file = fileRepo.findById(fileId).orElse(null);
+        if (file == null) return ResponseEntity.notFound().build();
+
+        GetObjectRequest getRequest = GetObjectRequest.builder()
+                .bucket(bucketName).key(file.getObjectKey()).build();
+
+        ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObjectAsBytes(getRequest);
+        String contentType = file.getContentType() != null && !file.getContentType().isBlank()
+                ? file.getContentType() : "application/pdf";
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getFileName() + "\"")
+                .contentType(MediaType.parseMediaType(contentType))
+                .body(objectBytes.asByteArray());
     }
 
     // ─── CLIENT: Get my files ─────────────────────────────────────────────────────
@@ -703,6 +781,8 @@ public class FileManagementController {
             @RequestParam(value = "category", defaultValue = "UPLOADED_BY_CLIENT") String category,
             @RequestParam(value = "customFileName", required = false) String customFileName,
             @RequestParam(value = "fileName", required = false) String fileNameParam,
+            @RequestParam(value = "folderId", required = false) Long folderId,
+            @RequestParam(value = "folderName", required = false) String folderNameParam,
             @AuthenticationPrincipal AuthUser user) {
         Map<String, Object> response = new HashMap<>();
         try {
@@ -754,6 +834,28 @@ public class FileManagementController {
             fileEntity.setStatus("ACTIVE");
             fileEntity.setClient(client);
 
+            // Folder validation & assignment for client
+            if (folderId != null) {
+                FolderEntity folder = folderRepo.findById(folderId).orElse(null);
+                if (folder == null) {
+                    response.put("status", "failed");
+                    response.put("message", "Selected folder does not exist");
+                    return ResponseEntity.badRequest().body(response);
+                }
+                boolean hasAccess = folder.isCommon() || (folder.getClient() != null && folder.getClient().getId().equals(client.getId()));
+                if (!hasAccess) {
+                    response.put("status", "failed");
+                    response.put("message", "You can only upload files to your allocated folder or office common folders");
+                    return ResponseEntity.status(403).body(response);
+                }
+                fileEntity.setFolderId(folder.getId());
+                fileEntity.setFolderName(folder.getFolderName());
+            } else if (folderNameParam != null && !folderNameParam.trim().isEmpty()) {
+                fileEntity.setFolderName(folderNameParam.trim());
+            } else {
+                fileEntity.setFolderName("General");
+            }
+
             FileEntity saved = fileRepo.save(fileEntity);
 
             // Notify staff & admin
@@ -772,6 +874,8 @@ public class FileManagementController {
             fileMap.put("uploadedByRole", saved.getUploadedByRole());
             fileMap.put("direction", saved.getDirection());
             fileMap.put("status", saved.getStatus());
+            fileMap.put("folderId", saved.getFolderId());
+            fileMap.put("folderName", saved.getFolderName());
             fileMap.put("canRename", true);
             fileMap.put("canDelete", true);
 
@@ -829,10 +933,207 @@ public class FileManagementController {
         return doDeleteFile(fileId, user, false);
     }
 
-    // ─── STAFF: Delete file ────────────────────────────────────────────────────────
+    // ─── STAFF: Delete file (BLOCKED - staff must submit deletion request with reason) ────
     @DeleteMapping({"/Staff/FileManagement/Delete/{fileId}", "/Staff/FileManagement/Files/{fileId}"})
     public ResponseEntity<Object> deleteFileStaff(@PathVariable Long fileId, @AuthenticationPrincipal AuthUser user) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", "failed");
+        response.put("message", "Staff members do not have direct file deletion privileges. Please submit a Deletion Request with reason for Administrator approval.");
+        return ResponseEntity.status(403).body(response);
+    }
+
+    // ─── STAFF: Request File Deletion with Reason ─────────────────────────────────
+    @PostMapping("/Staff/FileManagement/RequestDelete/{fileId}")
+    public ResponseEntity<Object> staffRequestDelete(
+            @PathVariable Long fileId,
+            @RequestBody(required = false) Map<String, Object> body,
+            @AuthenticationPrincipal AuthUser user) {
+        Map<String, Object> response = new HashMap<>();
+        FileEntity file = fileRepo.findById(fileId).orElse(null);
+        if (file == null) {
+            response.put("status", "failed");
+            response.put("message", "File record not found");
+            return ResponseEntity.status(404).body(response);
+        }
+
+        String reason = (body != null && body.containsKey("reason") && body.get("reason") != null)
+                ? (String) body.get("reason") : "No reason specified";
+        String staffName = resolveUploaderDisplayName(user);
+        String requestedByInfo = staffName + " (ID: " + (user != null ? user.getId() : "N/A") + ")";
+
+        file.setDeleteRequested(true);
+        file.setDeleteReason(reason);
+        file.setDeleteRequestedBy(requestedByInfo);
+        file.setDeleteRequestedById(user != null ? user.getId() : null);
+        file.setDeleteRequestedAt(LocalDateTime.now());
+        fileRepo.save(file);
+
+        // Notify Admin of deletion request
+        try {
+            notificationService.notifyAllAdmins(
+                    "FILE_DELETE_REQUEST",
+                    "⚠️ Deletion Requested by " + staffName,
+                    "Staff " + staffName + " requested permanent deletion of document '" + file.getFileName() + "'. Reason: " + reason,
+                    file.getId()
+            );
+        } catch (Exception ignored) {}
+
+        response.put("status", "success");
+        response.put("message", "Deletion request submitted to Administrator for review.");
+        return ResponseEntity.ok(response);
+    }
+
+    // ─── STAFF: Batch Request Deletion ────────────────────────────────────────────
+    @PostMapping("/Staff/FileManagement/RequestDeleteBatch")
+    public ResponseEntity<Object> staffRequestDeleteBatch(
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal AuthUser user) {
+        Map<String, Object> response = new HashMap<>();
+        List<?> rawIds = (List<?>) body.get("fileIds");
+        String reason = body.containsKey("reason") && body.get("reason") != null
+                ? (String) body.get("reason") : "Bulk deletion request from staff";
+
+        if (rawIds == null || rawIds.isEmpty()) {
+            response.put("status", "failed");
+            response.put("message", "No files specified for deletion request");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        String staffName = resolveUploaderDisplayName(user);
+        String requestedByInfo = staffName + " (ID: " + (user != null ? user.getId() : "N/A") + ")";
+
+        int count = 0;
+        for (Object item : rawIds) {
+            try {
+                Long fileId = Long.valueOf(item.toString());
+                FileEntity file = fileRepo.findById(fileId).orElse(null);
+                if (file != null) {
+                    file.setDeleteRequested(true);
+                    file.setDeleteReason(reason);
+                    file.setDeleteRequestedBy(requestedByInfo);
+                    file.setDeleteRequestedById(user != null ? user.getId() : null);
+                    file.setDeleteRequestedAt(LocalDateTime.now());
+                    fileRepo.save(file);
+                    count++;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        try {
+            notificationService.notifyAllAdmins(
+                    "FILE_DELETE_REQUEST",
+                    "⚠️ Batch Deletion Requested (" + count + " files)",
+                    "Staff " + staffName + " requested deletion of " + count + " file(s). Reason: " + reason,
+                    null
+            );
+        } catch (Exception ignored) {}
+
+        response.put("status", "success");
+        response.put("message", count + " deletion request(s) submitted to Administrator.");
+        response.put("count", count);
+        return ResponseEntity.ok(response);
+    }
+
+    // ─── ADMIN: Get Pending Deletion Requests ──────────────────────────────────────
+    @GetMapping("/Admin/FileManagement/DeleteRequests")
+    public ResponseEntity<List<FileEntity>> getPendingDeleteRequests() {
+        return ResponseEntity.ok(fileRepo.findByDeleteRequestedTrueOrderByDeleteRequestedAtDesc());
+    }
+
+    // ─── ADMIN: Approve Deletion Request (Permanently delete) ──────────────────────
+    @PostMapping("/Admin/FileManagement/ApproveDelete/{fileId}")
+    public ResponseEntity<Object> approveDeleteRequest(
+            @PathVariable Long fileId,
+            @AuthenticationPrincipal AuthUser user) {
         return doDeleteFile(fileId, user, false);
+    }
+
+    // ─── ADMIN: Reject Deletion Request ───────────────────────────────────────────
+    @PostMapping("/Admin/FileManagement/RejectDelete/{fileId}")
+    public ResponseEntity<Object> rejectDeleteRequest(
+            @PathVariable Long fileId,
+            @RequestBody(required = false) Map<String, Object> body,
+            @AuthenticationPrincipal AuthUser user) {
+        Map<String, Object> response = new HashMap<>();
+        FileEntity file = fileRepo.findById(fileId).orElse(null);
+        if (file == null) {
+            response.put("status", "failed");
+            response.put("message", "File record not found");
+            return ResponseEntity.status(404).body(response);
+        }
+
+        String note = (body != null && body.containsKey("note")) ? (String) body.get("note") : "Deletion request rejected by Administrator.";
+        Long staffId = file.getDeleteRequestedById();
+
+        file.setDeleteRequested(false);
+        file.setDeleteReason(null);
+        fileRepo.save(file);
+
+        if (staffId != null) {
+            try {
+                notificationService.createNotification(
+                        "STAFF",
+                        staffId,
+                        "FILE_DELETE_REJECTED",
+                        "File Deletion Request Declined",
+                        "Your request to delete document '" + file.getFileName() + "' was reviewed and declined by Administrator. Note: " + note,
+                        file.getId()
+                );
+            } catch (Exception ignored) {}
+        }
+
+        response.put("status", "success");
+        response.put("message", "Deletion request rejected.");
+        return ResponseEntity.ok(response);
+    }
+
+    // ─── ADMIN: Automated Email Sharing ───────────────────────────────────────────
+    @PostMapping("/Admin/FileManagement/ShareEmail")
+    public ResponseEntity<Object> shareFileViaEmail(
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal AuthUser user) {
+        Map<String, Object> res = new HashMap<>();
+        if (body == null || !body.containsKey("fileId") || !body.containsKey("receiverEmail")) {
+            res.put("status", "failed");
+            res.put("message", "File ID and Receiver Email are required.");
+            return ResponseEntity.badRequest().body(res);
+        }
+
+        Long fileId = Long.valueOf(body.get("fileId").toString());
+        String receiverEmail = (String) body.get("receiverEmail");
+        String subject = (String) body.get("subject");
+        String customMessage = (String) body.get("message");
+
+        FileEntity file = fileRepo.findById(fileId).orElse(null);
+        if (file == null) {
+            res.put("status", "failed");
+            res.put("message", "File not found.");
+            return ResponseEntity.status(404).body(res);
+        }
+
+        try {
+            GetObjectRequest getRequest = GetObjectRequest.builder()
+                    .bucket(bucketName).key(file.getObjectKey()).build();
+            ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObjectAsBytes(getRequest);
+            byte[] data = objectBytes.asByteArray();
+
+            emailService.sendDocumentEmailWithAttachment(
+                    receiverEmail.trim(),
+                    subject,
+                    customMessage,
+                    file.getFileName(),
+                    data,
+                    file.getContentType()
+            );
+
+            res.put("status", "success");
+            res.put("message", "Document successfully emailed to " + receiverEmail);
+            return ResponseEntity.ok(res);
+        } catch (Exception ex) {
+            res.put("status", "failed");
+            res.put("message", "Failed to send email: " + ex.getMessage());
+            return ResponseEntity.status(500).body(res);
+        }
     }
 
     // ─── CLIENT: Delete file ───────────────────────────────────────────────────────
@@ -875,6 +1176,45 @@ public class FileManagementController {
         response.put("status", "success");
         response.put("message", "File deleted successfully from AWS S3 and database.");
         return ResponseEntity.ok(response);
+    }
+
+    // ─── ADMIN & STAFF: Delete multiple files in batch ───────────────────────────
+    @PostMapping({"/Admin/FileManagement/DeleteBatch", "/Staff/FileManagement/DeleteBatch"})
+    public ResponseEntity<Object> deleteFilesBatch(
+            @RequestBody Map<String, List<Long>> request,
+            @AuthenticationPrincipal AuthUser user) {
+        List<Long> fileIds = request.get("fileIds");
+        if (fileIds == null || fileIds.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("status", "failed", "message", "No files specified for deletion"));
+        }
+        int deletedCount = 0;
+        for (Long fileId : fileIds) {
+            try {
+                FileEntity file = fileRepo.findById(fileId).orElse(null);
+                if (file != null) {
+                    if (file.getObjectKey() != null && !file.getObjectKey().isEmpty()) {
+                        try {
+                            DeleteObjectRequest delReq = DeleteObjectRequest.builder()
+                                    .bucket(bucketName)
+                                    .key(file.getObjectKey())
+                                    .build();
+                            s3Client.deleteObject(delReq);
+                        } catch (Exception ex) {
+                            System.err.println("Warning deleting object from AWS S3: " + ex.getMessage());
+                        }
+                    }
+                    fileRepo.deleteById(fileId);
+                    deletedCount++;
+                }
+            } catch (Exception e) {
+                System.err.println("Error deleting file " + fileId + ": " + e.getMessage());
+            }
+        }
+        Map<String, Object> res = new HashMap<>();
+        res.put("status", "success");
+        res.put("message", deletedCount + " document(s) permanently deleted from AWS S3 and database.");
+        res.put("deletedCount", deletedCount);
+        return ResponseEntity.ok(res);
     }
 
     // ─── ADMIN: Rename file ────────────────────────────────────────────────────────
@@ -985,5 +1325,249 @@ public class FileManagementController {
             res.put("error", e.getMessage());
             return ResponseEntity.internalServerError().body(res);
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // FOLDER MANAGEMENT API (Admin, Staff, Client)
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    // ─── ADMIN: Get all folders with counts (optional category filter) ───────────
+    @GetMapping("/Admin/Folders")
+    public ResponseEntity<List<Map<String, Object>>> getAdminFolders(
+            @RequestParam(value = "category", required = false) String category) {
+        List<FolderEntity> folders = folderRepo.findAllByOrderByCreatedAtDesc();
+        if (category != null && !category.isBlank() && !category.equalsIgnoreCase("ALL")) {
+            folders = folders.stream()
+                    .filter(f -> category.equalsIgnoreCase(f.getCategory()))
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        return ResponseEntity.ok(formatFoldersWithCounts(folders));
+    }
+
+    // ─── STAFF: Get all folders with counts (optional category filter) ───────────
+    @GetMapping("/Staff/Folders")
+    public ResponseEntity<List<Map<String, Object>>> getStaffFolders(
+            @RequestParam(value = "category", required = false) String category) {
+        List<FolderEntity> folders = folderRepo.findAllByOrderByCreatedAtDesc();
+        if (category != null && !category.isBlank() && !category.equalsIgnoreCase("ALL")) {
+            folders = folders.stream()
+                    .filter(f -> category.equalsIgnoreCase(f.getCategory()))
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        return ResponseEntity.ok(formatFoldersWithCounts(folders));
+    }
+
+    // ─── CLIENT: Get folders available to authenticated client ───────────────────
+    @GetMapping("/Client/Folders")
+    public ResponseEntity<List<Map<String, Object>>> getClientFolders(
+            @AuthenticationPrincipal AuthUser user,
+            @RequestParam(value = "category", required = false) String category) {
+        if (user == null) return ResponseEntity.status(401).build();
+        List<FolderEntity> folders = folderRepo.findAvailableForClient(user.getId());
+        if (category != null && !category.isBlank() && !category.equalsIgnoreCase("ALL")) {
+            folders = folders.stream()
+                    .filter(f -> category.equalsIgnoreCase(f.getCategory()))
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        return ResponseEntity.ok(formatFoldersWithCounts(folders));
+    }
+
+    // ─── ADMIN/STAFF: Get folders available for a specific client ─────────────────
+    @GetMapping({"/Admin/Folders/ForClient/{clientId}", "/Staff/Folders/ForClient/{clientId}"})
+    public ResponseEntity<List<Map<String, Object>>> getFoldersForSpecificClient(@PathVariable Long clientId) {
+        List<FolderEntity> folders = folderRepo.findAvailableForClient(clientId);
+        return ResponseEntity.ok(formatFoldersWithCounts(folders));
+    }
+
+    // ─── ADMIN: Create Folder ─────────────────────────────────────────────────────
+    @PostMapping("/Admin/Folders")
+    public ResponseEntity<Object> createFolderAdmin(
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal AuthUser user) {
+        return doCreateFolder(body, user);
+    }
+
+    // ─── STAFF: Create Folder ─────────────────────────────────────────────────────
+    @PostMapping("/Staff/Folders")
+    public ResponseEntity<Object> createFolderStaff(
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal AuthUser user) {
+        return doCreateFolder(body, user);
+    }
+
+    private ResponseEntity<Object> doCreateFolder(Map<String, Object> body, AuthUser user) {
+        Map<String, Object> res = new HashMap<>();
+        String folderName = body != null ? (String) body.get("folderName") : null;
+        if (folderName == null || folderName.trim().isEmpty()) {
+            res.put("status", "failed");
+            res.put("message", "Folder name is required");
+            return ResponseEntity.badRequest().body(res);
+        }
+
+        String description = body.containsKey("description") ? (String) body.get("description") : "";
+        String color = body.containsKey("folderColor") && body.get("folderColor") != null
+                ? (String) body.get("folderColor") : "#4f46e5";
+
+        String category = body.containsKey("category") && body.get("category") != null
+                ? body.get("category").toString().trim() : "OTHER";
+        if (category.equalsIgnoreCase("ALL") || category.isBlank()) {
+            category = "OTHER";
+        }
+
+        boolean isCommon = !body.containsKey("isCommon") || Boolean.parseBoolean(body.get("isCommon").toString());
+
+        Client client = null;
+        if (!isCommon && body.get("clientId") != null && !body.get("clientId").toString().isEmpty()) {
+            try {
+                Long clientId = Long.valueOf(body.get("clientId").toString());
+                client = clientRepo.findById(clientId).orElse(null);
+            } catch (Exception ignored) {}
+        }
+
+        FolderEntity folder = new FolderEntity();
+        folder.setFolderName(folderName.trim());
+        folder.setDescription(description != null ? description.trim() : "");
+        folder.setFolderColor(color);
+        folder.setCategory(category);
+        folder.setCommon(isCommon);
+        folder.setClient(client);
+        folder.setCreatedByRole(user.getRole());
+        folder.setCreatedById(user.getId());
+
+        FolderEntity saved = folderRepo.save(folder);
+
+        Map<String, Object> folderMap = buildFolderDto(saved, 0L);
+        res.put("status", "success");
+        res.put("message", "Folder created successfully");
+        res.put("folder", folderMap);
+        return ResponseEntity.ok(res);
+    }
+
+    // ─── ADMIN/STAFF: Rename / Edit Folder ─────────────────────────────────────────
+    @PutMapping({"/Admin/Folders/{folderId}", "/Staff/Folders/{folderId}"})
+    public ResponseEntity<Object> renameFolder(
+            @PathVariable Long folderId,
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal AuthUser user) {
+        Map<String, Object> res = new HashMap<>();
+        FolderEntity folder = folderRepo.findById(folderId).orElse(null);
+        if (folder == null) {
+            res.put("status", "failed");
+            res.put("message", "Folder not found");
+            return ResponseEntity.status(404).body(res);
+        }
+
+        String newName = body != null ? (String) body.get("folderName") : null;
+        if (newName == null || newName.trim().isEmpty()) {
+            res.put("status", "failed");
+            res.put("message", "Folder name cannot be empty");
+            return ResponseEntity.badRequest().body(res);
+        }
+
+        folder.setFolderName(newName.trim());
+        if (body.containsKey("description")) {
+            folder.setDescription((String) body.get("description"));
+        }
+        if (body.containsKey("folderColor") && body.get("folderColor") != null) {
+            folder.setFolderColor((String) body.get("folderColor"));
+        }
+        if (body.containsKey("category") && body.get("category") != null) {
+            String cat = body.get("category").toString().trim();
+            if (!cat.equalsIgnoreCase("ALL")) {
+                folder.setCategory(cat);
+            }
+        }
+        if (body.containsKey("isCommon")) {
+            boolean isCommon = Boolean.parseBoolean(body.get("isCommon").toString());
+            folder.setCommon(isCommon);
+            if (isCommon) {
+                folder.setClient(null);
+            } else if (body.get("clientId") != null) {
+                try {
+                    Long cid = Long.valueOf(body.get("clientId").toString());
+                    folder.setClient(clientRepo.findById(cid).orElse(null));
+                } catch (Exception ignored) {}
+            }
+        }
+
+        FolderEntity saved = folderRepo.save(folder);
+
+        // Update all existing files in this folder with the new folder name
+        List<FileEntity> filesInFolder = fileRepo.findByFolderId(folderId);
+        for (FileEntity f : filesInFolder) {
+            f.setFolderName(saved.getFolderName());
+        }
+        fileRepo.saveAll(filesInFolder);
+
+        long count = fileRepo.countByFolderId(saved.getId());
+        res.put("status", "success");
+        res.put("message", "Folder renamed successfully");
+        res.put("folder", buildFolderDto(saved, count));
+        return ResponseEntity.ok(res);
+    }
+
+    // ─── ADMIN: Delete Folder ─────────────────────────────────────────────────────
+    @DeleteMapping("/Admin/Folders/{folderId}")
+    public ResponseEntity<Object> deleteFolder(
+            @PathVariable Long folderId,
+            @AuthenticationPrincipal AuthUser user) {
+        Map<String, Object> res = new HashMap<>();
+        FolderEntity folder = folderRepo.findById(folderId).orElse(null);
+        if (folder == null) {
+            res.put("status", "failed");
+            res.put("message", "Folder not found");
+            return ResponseEntity.status(404).body(res);
+        }
+
+        // Unlink files in this folder to General
+        List<FileEntity> filesInFolder = fileRepo.findByFolderId(folderId);
+        for (FileEntity f : filesInFolder) {
+            f.setFolderId(null);
+            f.setFolderName("General");
+        }
+        fileRepo.saveAll(filesInFolder);
+
+        folderRepo.delete(folder);
+
+        res.put("status", "success");
+        res.put("message", "Folder deleted successfully. Attached files were unlinked.");
+        return ResponseEntity.ok(res);
+    }
+
+    private List<Map<String, Object>> formatFoldersWithCounts(List<FolderEntity> folders) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (FolderEntity f : folders) {
+            long count = fileRepo.countByFolderId(f.getId());
+            result.add(buildFolderDto(f, count));
+        }
+        return result;
+    }
+
+    private Map<String, Object> buildFolderDto(FolderEntity f, long count) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", f.getId());
+        map.put("folderName", f.getFolderName());
+        map.put("description", f.getDescription());
+        map.put("folderColor", f.getFolderColor());
+        map.put("category", f.getCategory());
+        map.put("isCommon", f.isCommon());
+        map.put("fileCount", count);
+        map.put("createdAt", f.getCreatedAt());
+        map.put("updatedAt", f.getUpdatedAt());
+        map.put("createdByRole", f.getCreatedByRole());
+        if (f.getClient() != null) {
+            Map<String, Object> clientMap = new HashMap<>();
+            clientMap.put("id", f.getClient().getId());
+            clientMap.put("name", f.getClient().getName());
+            clientMap.put("email", f.getClient().getEmail());
+            clientMap.put("mobile", f.getClient().getMobile());
+            clientMap.put("legalname", f.getClient().getLegalname());
+            map.put("client", clientMap);
+            map.put("allocatedTo", f.getClient().getName());
+        } else {
+            map.put("client", null);
+            map.put("allocatedTo", f.isCommon() ? "All Clients (Common)" : "General");
+        }
+        return map;
     }
 }

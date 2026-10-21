@@ -16,10 +16,18 @@ public class JwtUtil {
 	
 	Key key=Keys.hmacShaKeyFor(SECRET.getBytes());
 	
-	public String generateToken(String username , String role,Long id) {
-		return Jwts.builder().setSubject(username).claim("ROLE",role).claim("ID",id).setIssuedAt( new Date ()).setExpiration( new Date(System.currentTimeMillis()+ 24 * 60 * 60 * 1000))
-				.signWith(key,SignatureAlgorithm.HS256).compact();
-		
+	// Token expiration duration: 60 Days (60 * 24 * 60 * 60 * 1000 ms)
+	public static final long EXPIRATION_TIME_MS = 60L * 24L * 60L * 60L * 1000L;
+
+	public String generateToken(String username, String role, Long id) {
+		return Jwts.builder()
+				.setSubject(username)
+				.claim("ROLE", role)
+				.claim("ID", id)
+				.setIssuedAt(new Date())
+				.setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME_MS))
+				.signWith(key, SignatureAlgorithm.HS256)
+				.compact();
 	}
 	
 	public String extractUsername(String token) {

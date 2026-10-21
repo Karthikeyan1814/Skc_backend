@@ -54,6 +54,17 @@ public class FileEntity {
     // Extension request flag
     private boolean extensionRequested = false;
 
+    // Staff deletion request tracking
+    private boolean deleteRequested = false;
+    private String deleteReason;
+    private String deleteRequestedBy;
+    private Long deleteRequestedById;
+    private LocalDateTime deleteRequestedAt;
+
+    // Folder association
+    private Long folderId;
+    private String folderName;
+
     @ManyToOne
     @JoinColumn(name = "client_id")
     private Client client;
@@ -113,8 +124,29 @@ public class FileEntity {
     public boolean isExtensionRequested() { return extensionRequested; }
     public void setExtensionRequested(boolean extensionRequested) { this.extensionRequested = extensionRequested; }
 
+    public boolean isDeleteRequested() { return deleteRequested; }
+    public void setDeleteRequested(boolean deleteRequested) { this.deleteRequested = deleteRequested; }
+
+    public String getDeleteReason() { return deleteReason; }
+    public void setDeleteReason(String deleteReason) { this.deleteReason = deleteReason; }
+
+    public String getDeleteRequestedBy() { return deleteRequestedBy; }
+    public void setDeleteRequestedBy(String deleteRequestedBy) { this.deleteRequestedBy = deleteRequestedBy; }
+
+    public Long getDeleteRequestedById() { return deleteRequestedById; }
+    public void setDeleteRequestedById(Long deleteRequestedById) { this.deleteRequestedById = deleteRequestedById; }
+
+    public LocalDateTime getDeleteRequestedAt() { return deleteRequestedAt; }
+    public void setDeleteRequestedAt(LocalDateTime deleteRequestedAt) { this.deleteRequestedAt = deleteRequestedAt; }
+
     public Client getClient() { return client; }
     public void setClient(Client client) { this.client = client; }
+
+    public Long getFolderId() { return folderId; }
+    public void setFolderId(Long folderId) { this.folderId = folderId; }
+
+    public String getFolderName() { return folderName; }
+    public void setFolderName(String folderName) { this.folderName = folderName; }
 
     /**
      * Returns true if the file is expired (expiration date set and in the past).

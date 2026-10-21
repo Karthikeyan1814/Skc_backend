@@ -80,7 +80,7 @@ public class RegisterController {
 		}
 
 		if (password.isEmpty()) {
-			password = mobile.substring(mobile.length() - 4) + "2026";
+			password = "kathiravan&co";
 		}
 
 		Client client = new Client();

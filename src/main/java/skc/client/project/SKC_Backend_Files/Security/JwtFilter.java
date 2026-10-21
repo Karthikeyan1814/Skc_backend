@@ -64,8 +64,13 @@ public class JwtFilter  extends GenericFilter{
 				System.out.print("Token"+token);
 				
 				
-			}catch(Exception e) {
-				System.out.println("Invalid Token");
+			} catch(io.jsonwebtoken.ExpiredJwtException eje) {
+				System.out.println("Expired JWT Token: " + eje.getMessage());
+				if (response instanceof jakarta.servlet.http.HttpServletResponse httpResp) {
+					httpResp.setHeader("X-Token-Expired", "true");
+				}
+			} catch(Exception e) {
+				System.out.println("Invalid Token: " + e.getMessage());
 			}
 			
 		}

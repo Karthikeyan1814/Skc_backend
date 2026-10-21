@@ -3,6 +3,7 @@ package skc.client.project.SKC_Backend_Files.Controller;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,8 +39,11 @@ public class AuthLoginController {
 
     // In-memory OTP store (email -> [otp, expiryMillis])
     private static final Map<String, OtpRecord> OTP_STORE = new ConcurrentHashMap<>();
-
     private record OtpRecord(String otp, long expiresAt) {}
+
+    // In-memory Staff Login authorization session store (sessionId -> StaffLoginSession)
+    private record StaffLoginSession(Long staffId, String staffName, String staffEmail, String staffMobile, String staffRole, String otp, long expiresAt) {}
+    private static final Map<String, StaffLoginSession> STAFF_LOGIN_SESSIONS = new ConcurrentHashMap<>();
 
     // ─── CLIENT LOGIN ────────────────────────────────────────────────────────────
     @PostMapping("/SignIn/Client")
@@ -67,6 +71,11 @@ public class AuthLoginController {
         response.put("token", token);
         response.put("name", client.getName());
         response.put("id", client.getId());
+        response.put("mobile", client.getMobile() != null ? client.getMobile() : "");
+        response.put("email", client.getEmail() != null ? client.getEmail() : "");
+        response.put("gstin", client.getGstnumber() != null ? client.getGstnumber() : "");
+        response.put("pan", client.getPannumber() != null ? client.getPannumber() : "");
+        response.put("address", client.getLocation() != null ? client.getLocation() : "");
         response.put("isTempPass", client.isTemppass());
         response.put("active", clientActive);
         response.put("isDeactivated", !clientActive);
@@ -108,7 +117,7 @@ public class AuthLoginController {
         return ResponseEntity.ok(response);
     }
 
-    // ─── STAFF LOGIN ─────────────────────────────────────────────────────────────
+    // ─── STAFF LOGIN: STEP 1 - VERIFY CREDENTIALS & DISPATCH ADMIN OTP ───────────
     @PostMapping("/SignIn/Staff")
     public ResponseEntity<Object> staffLogin(@RequestBody LoginRequest req) {
         Map<String, Object> response = new HashMap<>();
@@ -133,13 +142,120 @@ public class AuthLoginController {
             return ResponseEntity.badRequest().body(response);
         }
 
-        String token = jwtutil.generateToken(staff.getMobile(), staff.getRole(), staff.getId());
-        response.put("status", "success");
-        response.put("role", staff.getRole());
-        response.put("token", token);
-        response.put("name", staff.getName());
-        response.put("id", staff.getId());
+        // Generate 6-digit OTP and unique session ID
+        String otp = String.format("%06d", new Random().nextInt(1000000));
+        String sessionId = UUID.randomUUID().toString();
+        long expiresAt = System.currentTimeMillis() + 10 * 60 * 1000; // 10 minutes
+
+        STAFF_LOGIN_SESSIONS.put(sessionId, new StaffLoginSession(
+            staff.getId(), staff.getName(), staff.getEmail(), staff.getMobile(), staff.getRole(), otp, expiresAt
+        ));
+
+        // Locate Admin email to receive authorization OTP
+        String adminEmail = "contact@srikathiravan.com";
+        Admin admin = adminRepo.findAll().stream().filter(Admin::isActive).findFirst().orElse(null);
+        if (admin != null && admin.getEmail() != null && admin.getEmail().contains("@")) {
+            adminEmail = admin.getEmail();
+        }
+
+        emailService.sendStaffLoginAdminOtp(adminEmail, staff.getName(), staff.getEmail(), staff.getMobile(), otp);
+
+        String maskedEmail = maskEmail(adminEmail);
+        response.put("status", "OTP_REQUIRED");
+        response.put("sessionId", sessionId);
+        response.put("staffName", staff.getName());
+        response.put("adminEmailMasked", maskedEmail);
+        response.put("message", "Staff credentials verified. For security, a 6-digit authorization code has been dispatched to the Administrator's email (" + maskedEmail + "). Please obtain the OTP from Admin to complete sign-in.");
         return ResponseEntity.ok(response);
+    }
+
+    // ─── STAFF LOGIN: STEP 2 - VERIFY ADMIN OTP & COMPLETE LOGIN ─────────────────
+    @PostMapping("/SignIn/Staff/VerifyOtp")
+    public ResponseEntity<Object> verifyStaffLoginOtp(@RequestBody Map<String, String> body) {
+        String sessionId = body.get("sessionId");
+        String enteredOtp = body.get("otp");
+        Map<String, Object> response = new HashMap<>();
+
+        if (sessionId == null || enteredOtp == null || enteredOtp.trim().isEmpty()) {
+            response.put("status", "failed");
+            response.put("message", "Session ID and 6-digit OTP are required.");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        StaffLoginSession session = STAFF_LOGIN_SESSIONS.get(sessionId);
+        if (session == null || System.currentTimeMillis() > session.expiresAt()) {
+            STAFF_LOGIN_SESSIONS.remove(sessionId);
+            response.put("status", "failed");
+            response.put("message", "Authorization OTP has expired or session is invalid. Please sign in again.");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        if (!session.otp().trim().equals(enteredOtp.trim())) {
+            response.put("status", "failed");
+            response.put("message", "Invalid OTP. Please enter the exact 6-digit code provided by your Administrator.");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        // Successfully authorized by Admin OTP
+        STAFF_LOGIN_SESSIONS.remove(sessionId);
+        String token = jwtutil.generateToken(session.staffMobile(), session.staffRole(), session.staffId());
+        response.put("status", "success");
+        response.put("role", session.staffRole());
+        response.put("token", token);
+        response.put("name", session.staffName());
+        response.put("id", session.staffId());
+        response.put("message", "Admin authorization verified successfully! Welcome " + session.staffName());
+        return ResponseEntity.ok(response);
+    }
+
+    // ─── STAFF LOGIN: RESEND ADMIN OTP ───────────────────────────────────────────
+    @PostMapping("/SignIn/Staff/ResendOtp")
+    public ResponseEntity<Object> resendStaffLoginOtp(@RequestBody Map<String, String> body) {
+        String sessionId = body.get("sessionId");
+        Map<String, Object> response = new HashMap<>();
+
+        if (sessionId == null) {
+            response.put("status", "failed");
+            response.put("message", "Session ID is required.");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        StaffLoginSession session = STAFF_LOGIN_SESSIONS.get(sessionId);
+        if (session == null) {
+            response.put("status", "failed");
+            response.put("message", "Session expired. Please sign in again.");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        String newOtp = String.format("%06d", new Random().nextInt(1000000));
+        long expiresAt = System.currentTimeMillis() + 10 * 60 * 1000;
+        STAFF_LOGIN_SESSIONS.put(sessionId, new StaffLoginSession(
+            session.staffId(), session.staffName(), session.staffEmail(), session.staffMobile(), session.staffRole(), newOtp, expiresAt
+        ));
+
+        String adminEmail = "contact@srikathiravan.com";
+        Admin admin = adminRepo.findAll().stream().filter(Admin::isActive).findFirst().orElse(null);
+        if (admin != null && admin.getEmail() != null && admin.getEmail().contains("@")) {
+            adminEmail = admin.getEmail();
+        }
+
+        emailService.sendStaffLoginAdminOtp(adminEmail, session.staffName(), session.staffEmail(), session.staffMobile(), newOtp);
+
+        String maskedEmail = maskEmail(adminEmail);
+        response.put("status", "success");
+        response.put("message", "A new authorization OTP has been dispatched to Admin email (" + maskedEmail + ").");
+        return ResponseEntity.ok(response);
+    }
+
+    private String maskEmail(String email) {
+        if (email == null || !email.contains("@")) return "Admin Email";
+        int atIndex = email.indexOf("@");
+        String user = email.substring(0, atIndex);
+        String domain = email.substring(atIndex);
+        if (user.length() <= 2) {
+            return user.charAt(0) + "***" + domain;
+        }
+        return user.charAt(0) + "***" + user.charAt(user.length() - 1) + domain;
     }
 
     // ─── FORGOT PASSWORD: SEND OTP ───────────────────────────────────────────────

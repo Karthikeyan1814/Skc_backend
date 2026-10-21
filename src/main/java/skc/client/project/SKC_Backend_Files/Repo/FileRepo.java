@@ -23,4 +23,12 @@ public interface FileRepo extends JpaRepository<FileEntity, Long> {
     List<FileEntity> findAllByOrderByCreatedAtDesc();
 
     List<FileEntity> findByCategoryOrderByCreatedAtDesc(String category);
+
+    List<FileEntity> findByFolderId(Long folderId);
+
+    List<FileEntity> findByFolderIdOrderByCreatedAtDesc(Long folderId);
+
+    long countByFolderId(Long folderId);
+
+    List<FileEntity> findByDeleteRequestedTrueOrderByDeleteRequestedAtDesc();
 }

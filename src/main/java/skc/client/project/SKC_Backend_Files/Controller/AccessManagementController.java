@@ -17,6 +17,7 @@ import skc.client.project.SKC_Backend_Files.entity.Staff;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
@@ -988,6 +989,7 @@ public class AccessManagementController {
         }
 
         int count = 0;
+        List<Map<String, String>> emailTasks = new ArrayList<>();
 
         // Dispatches based on target
         if (target.equals("clients") || target.equals("all")) {
@@ -996,7 +998,10 @@ public class AccessManagementController {
                 if (Boolean.TRUE.equals(c.isActive())) {
                     notificationService.notifyClient(c.getId(), "ANNOUNCEMENT", title, message, null);
                     if (sendEmail && c.getEmail() != null && !c.getEmail().isBlank()) {
-                        emailService.sendBroadcastNotificationEmail(c.getEmail(), c.getName(), title, message);
+                        Map<String, String> item = new HashMap<>();
+                        item.put("email", c.getEmail());
+                        item.put("name", c.getName() != null ? c.getName() : "Client");
+                        emailTasks.add(item);
                     }
                     count++;
                 }
@@ -1009,7 +1014,10 @@ public class AccessManagementController {
                 if (Boolean.TRUE.equals(s.isActive())) {
                     notificationService.createNotification("STAFF", s.getId(), "ANNOUNCEMENT", title, message, null);
                     if (sendEmail && s.getEmail() != null && !s.getEmail().isBlank()) {
-                        emailService.sendBroadcastNotificationEmail(s.getEmail(), s.getName(), title, message);
+                        Map<String, String> item = new HashMap<>();
+                        item.put("email", s.getEmail());
+                        item.put("name", s.getName() != null ? s.getName() : "Staff Member");
+                        emailTasks.add(item);
                     }
                     count++;
                 }
@@ -1022,15 +1030,35 @@ public class AccessManagementController {
                 if (Boolean.TRUE.equals(a.isActive())) {
                     notificationService.createNotification("ADMIN", a.getId(), "ANNOUNCEMENT", title, message, null);
                     if (sendEmail && a.getEmail() != null && !a.getEmail().isBlank()) {
-                        emailService.sendBroadcastNotificationEmail(a.getEmail(), a.getName(), title, message);
+                        Map<String, String> item = new HashMap<>();
+                        item.put("email", a.getEmail());
+                        item.put("name", a.getName() != null ? a.getName() : "Administrator");
+                        emailTasks.add(item);
                     }
                     count++;
                 }
             }
         }
 
+        // Asynchronously dispatch all SMTP emails in background to prevent request timeout
+        if (!emailTasks.isEmpty()) {
+            final String fTitle = title;
+            final String fMessage = message;
+            CompletableFuture.runAsync(() -> {
+                System.out.println(">>> [BroadcastNotification] Background email dispatch started for " + emailTasks.size() + " recipient(s)");
+                for (Map<String, String> task : emailTasks) {
+                    try {
+                        emailService.sendBroadcastNotificationEmail(task.get("email"), task.get("name"), fTitle, fMessage);
+                    } catch (Exception ex) {
+                        System.err.println(">>> [BroadcastNotification] Error emailing " + task.get("email") + ": " + ex.getMessage());
+                    }
+                }
+                System.out.println(">>> [BroadcastNotification] Background email dispatch completed successfully.");
+            });
+        }
+
         response.put("status", "success");
-        response.put("message", "Official broadcast dispatched to " + count + " recipient(s).");
+        response.put("message", "Official broadcast dispatched to " + count + " recipient(s) successfully!");
         response.put("dispatchedCount", count);
         return ResponseEntity.ok(response);
     }
