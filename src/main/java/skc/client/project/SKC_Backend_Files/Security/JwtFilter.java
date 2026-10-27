@@ -20,27 +20,26 @@ import jakarta.servlet.http.HttpServletRequest;
 import skc.client.project.SKC_Backend_Files.Service.CustomeUserDetailService;
 
 @Component
-public class JwtFilter  extends GenericFilter{
+public class JwtFilter extends GenericFilter {
 
 	@Autowired
 	private JwtUtil jwtutil;
-	
+
 	@Autowired
 	private CustomeUserDetailService UserServices;
-	
+
 	@Override
-	public void doFilter(ServletRequest request,ServletResponse response,FilterChain chain) throws IOException, ServletException {
-		
-		HttpServletRequest req=(HttpServletRequest) request;
-		
-		String authHeader=req.getHeader("Authorization");
-		
-		if(authHeader != null && authHeader.startsWith("Bearer ")) {
-			
-			System.out.println("Before try");
-			
+	public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+			throws IOException, ServletException {
+
+		HttpServletRequest req = (HttpServletRequest) request;
+
+		String authHeader = req.getHeader("Authorization");
+
+		if (authHeader != null && authHeader.startsWith("Bearer ")) {
+
 			try {
-				
+
 				String token = authHeader.substring(7);
 				String username = jwtutil.extractUsername(token);
 				String role = jwtutil.extractRole(token);
@@ -59,20 +58,16 @@ public class JwtFilter  extends GenericFilter{
 						user.getAuthorities());
 
 				SecurityContextHolder.getContext().setAuthentication(auth);
-				System.out.print(user.getUsername());
-				System.out.print(user.getAuthorities());
-				System.out.print("Token"+token);
-				
-				
-			} catch(io.jsonwebtoken.ExpiredJwtException eje) {
+
+			} catch (io.jsonwebtoken.ExpiredJwtException eje) {
 				System.out.println("Expired JWT Token: " + eje.getMessage());
 				if (response instanceof jakarta.servlet.http.HttpServletResponse httpResp) {
 					httpResp.setHeader("X-Token-Expired", "true");
 				}
-			} catch(Exception e) {
+			} catch (Exception e) {
 				System.out.println("Invalid Token: " + e.getMessage());
 			}
-			
+
 		}
 		chain.doFilter(request, response);
 	}
