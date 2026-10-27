@@ -83,6 +83,11 @@ public class EmailService {
         String cleanKey = brevoApiKey != null ? brevoApiKey.trim().replaceAll("^[\"']|[\"']$", "") : "";
         if (cleanKey.isEmpty()) return false;
 
+        if (cleanKey.startsWith("xsmtpsib-")) {
+            System.err.println(">>> [EmailService] ERROR: You configured an SMTP Key ('xsmtpsib-...'). Brevo REST API requires an API Key ('xkeysib-...')! In Brevo Dashboard -> Settings -> SMTP & API -> click the 'API Keys' tab (NOT the SMTP tab) -> Generate a new API key.");
+            return false;
+        }
+
         if (cleanKey.contains("*")) {
             System.err.println(">>> [EmailService] ERROR: Your Brevo API key contains asterisks (***). You copied a masked key from the Brevo table! Please click 'Generate a new API key' in Brevo and copy the full key immediately before closing the popup.");
             return false;
