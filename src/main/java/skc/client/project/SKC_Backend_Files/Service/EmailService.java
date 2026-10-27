@@ -23,8 +23,14 @@ public class EmailService {
     @Value("${brevo.api.key:}")
     private String brevoApiKey;
 
+    @Value("${brevo.sender.email:}")
+    private String brevoSenderEmail;
+
+    @Value("${resend.api.key:}")
+    private String resendApiKey;
+
     /**
-     * Sends a general HTML email. Supports both standard JavaMail SMTP and Brevo HTTPS REST API (Port 443).
+     * Sends a general HTML email. Supports standard JavaMail SMTP, Brevo HTTPS REST API, and Resend HTTPS API.
      */
     public void sendHtmlEmail(String to, String subject, String htmlBody) throws MessagingException {
         System.out.println(">>> [EmailService] Sending email to: " + to + " | Subject: " + subject);
@@ -35,7 +41,13 @@ public class EmailService {
             if (sent) return;
         }
 
-        // 2. Standard SMTP delivery
+        // 2. If Resend HTTP API Key is configured, prioritize HTTPS API over port 443
+        if (resendApiKey != null && !resendApiKey.isBlank()) {
+            boolean sent = sendViaResendApi(to, subject, htmlBody);
+            if (sent) return;
+        }
+
+        // 3. Standard SMTP delivery
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -47,9 +59,13 @@ public class EmailService {
             System.out.println(">>> [EmailService] SUCCESS: Email delivered to: " + to);
         } catch (Exception ex) {
             System.err.println(">>> [EmailService] SMTP delivery failed to " + to + ": " + ex.getMessage());
-            // If Brevo is configured, fallback to Brevo API
+            // Fallback to HTTP APIs if available
             if (brevoApiKey != null && !brevoApiKey.isBlank()) {
                 boolean sent = sendViaBrevoApi(to, subject, htmlBody);
+                if (sent) return;
+            }
+            if (resendApiKey != null && !resendApiKey.isBlank()) {
+                boolean sent = sendViaResendApi(to, subject, htmlBody);
                 if (sent) return;
             }
             if (ex instanceof MessagingException) {
@@ -64,15 +80,27 @@ public class EmailService {
      * Bypasses hosting provider firewall restrictions on SMTP ports (25, 465, 587).
      */
     public boolean sendViaBrevoApi(String to, String subject, String htmlBody) {
+        String cleanKey = brevoApiKey != null ? brevoApiKey.trim().replaceAll("^[\"']|[\"']$", "") : "";
+        if (cleanKey.isEmpty()) return false;
+
+        if (cleanKey.contains("*")) {
+            System.err.println(">>> [EmailService] ERROR: Your Brevo API key contains asterisks (***). You copied a masked key from the Brevo table! Please click 'Generate a new API key' in Brevo and copy the full key immediately before closing the popup.");
+            return false;
+        }
+
+        String sender = (brevoSenderEmail != null && !brevoSenderEmail.isBlank())
+                ? brevoSenderEmail.trim()
+                : fromEmail;
+
         try {
-            System.out.println(">>> [EmailService] Dispatching via Brevo HTTPS REST API (Port 443)...");
+            System.out.println(">>> [EmailService] Dispatching via Brevo HTTPS REST API (Port 443)... Sender: " + sender);
             java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
                     .connectTimeout(java.time.Duration.ofSeconds(10))
                     .build();
 
             String jsonPayload = String.format(
                     "{\"sender\":{\"name\":\"Sri Kathiravan & Co.\",\"email\":\"%s\"},\"to\":[{\"email\":\"%s\"}],\"subject\":\"%s\",\"htmlContent\":\"%s\"}",
-                    escapeJson(fromEmail),
+                    escapeJson(sender),
                     escapeJson(to),
                     escapeJson(subject),
                     escapeJson(htmlBody)
@@ -80,7 +108,7 @@ public class EmailService {
 
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                     .uri(java.net.URI.create("https://api.brevo.com/v3/smtp/email"))
-                    .header("api-key", brevoApiKey.trim())
+                    .header("api-key", cleanKey)
                     .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
                     .POST(java.net.http.HttpRequest.BodyPublishers.ofString(jsonPayload, java.nio.charset.StandardCharsets.UTF_8))
@@ -93,10 +121,55 @@ public class EmailService {
                 return true;
             } else {
                 System.err.println(">>> [EmailService] Brevo HTTPS API failed with status " + response.statusCode() + ": " + response.body());
+                if (response.statusCode() == 401) {
+                    System.err.println(">>> [EmailService] HINT for 401: Generate a brand new API v3 key in Brevo (under Settings -> SMTP & API -> API Keys -> Generate a new API key) and paste it into Render Environment as BREVO_API_KEY.");
+                }
                 return false;
             }
         } catch (Exception e) {
             System.err.println(">>> [EmailService] Brevo HTTPS API exception: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Dispatches transactional email via Resend HTTPS REST API (Port 443).
+     */
+    public boolean sendViaResendApi(String to, String subject, String htmlBody) {
+        String cleanKey = resendApiKey != null ? resendApiKey.trim().replaceAll("^[\"']|[\"']$", "") : "";
+        if (cleanKey.isEmpty()) return false;
+
+        try {
+            System.out.println(">>> [EmailService] Dispatching via Resend HTTPS API (Port 443)...");
+            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(10))
+                    .build();
+
+            String jsonPayload = String.format(
+                    "{\"from\":\"Sri Kathiravan & Co. <onboarding@resend.dev>\",\"to\":[\"%s\"],\"subject\":\"%s\",\"html\":\"%s\"}",
+                    escapeJson(to),
+                    escapeJson(subject),
+                    escapeJson(htmlBody)
+            );
+
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("https://api.resend.com/emails"))
+                    .header("Authorization", "Bearer " + cleanKey)
+                    .header("Content-Type", "application/json")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(jsonPayload, java.nio.charset.StandardCharsets.UTF_8))
+                    .timeout(java.time.Duration.ofSeconds(15))
+                    .build();
+
+            java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                System.out.println(">>> [EmailService] SUCCESS via Resend HTTPS API: Delivered to " + to + " (HTTP " + response.statusCode() + ")");
+                return true;
+            } else {
+                System.err.println(">>> [EmailService] Resend HTTPS API failed with status " + response.statusCode() + ": " + response.body());
+                return false;
+            }
+        } catch (Exception e) {
+            System.err.println(">>> [EmailService] Resend HTTPS API exception: " + e.getMessage());
             return false;
         }
     }
