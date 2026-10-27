@@ -17,6 +17,6 @@ public interface FolderRepo extends JpaRepository<FolderEntity, Long> {
 
     List<FolderEntity> findByClientIdOrderByCreatedAtDesc(Long clientId);
 
-    @Query("SELECT f FROM FolderEntity f WHERE f.isCommon = true OR (f.client IS NOT NULL AND f.client.id = :clientId) ORDER BY f.isCommon DESC, f.folderName ASC")
+    @Query("SELECT f FROM FolderEntity f WHERE (f.client IS NOT NULL AND f.client.id = :clientId) ORDER BY f.folderName ASC")
     List<FolderEntity> findAvailableForClient(@Param("clientId") Long clientId);
 }

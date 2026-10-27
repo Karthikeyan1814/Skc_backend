@@ -241,12 +241,11 @@ public class FileManagementController {
             client = clientRepo.findById(clientId).orElse(null);
         }
 
-        String direction = "SENT_TO_CLIENT";
-        String objectKey;
-        if (client != null && !"PERSONAL".equalsIgnoreCase(targetAudience) && !"STAFF".equalsIgnoreCase(targetAudience)) {
+        boolean isCommonSpace = "COMMON".equalsIgnoreCase(targetAudience) || "STAFF".equalsIgnoreCase(targetAudience) || "SHARED_WITH_STAFF".equalsIgnoreCase(targetAudience);
+        if (client != null && !isCommonSpace && !"PERSONAL".equalsIgnoreCase(targetAudience)) {
             objectKey = user.getRole() + "/" + clientId + "/" + UUID.randomUUID() + "_" + filename;
             direction = "SENT_TO_CLIENT";
-        } else if ("STAFF".equalsIgnoreCase(targetAudience) || "SHARED_WITH_STAFF".equalsIgnoreCase(targetAudience)) {
+        } else if (isCommonSpace) {
             objectKey = user.getRole() + "/staff_shared/" + UUID.randomUUID() + "_" + filename;
             direction = "SHARED_WITH_STAFF";
         } else {
@@ -377,10 +376,12 @@ public class FileManagementController {
                 client = clientRepo.findById(clientId).orElse(null);
             }
 
-            // For non-important files, client is strictly required
-            if (!isImportant && client == null) {
+            boolean isCommonSpace = "COMMON".equalsIgnoreCase(targetAudience) || "STAFF".equalsIgnoreCase(targetAudience) || "SHARED_WITH_STAFF".equalsIgnoreCase(targetAudience);
+
+            // If not important and not common office space, client is strictly required
+            if (!isImportant && !isCommonSpace && client == null) {
                 response.put("status", "failed");
-                response.put("message", "Please select a client for this category");
+                response.put("message", "Please select a client or choose Common Office Space for this document");
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -399,10 +400,10 @@ public class FileManagementController {
             String objectKey;
             String direction;
 
-            if (client != null && !"PERSONAL".equalsIgnoreCase(targetAudience) && !"STAFF".equalsIgnoreCase(targetAudience)) {
+            if (client != null && !isCommonSpace && !"PERSONAL".equalsIgnoreCase(targetAudience)) {
                 objectKey = user.getRole() + "/" + client.getId() + "/" + UUID.randomUUID() + "_" + originalName;
                 direction = "SENT_TO_CLIENT";
-            } else if ("STAFF".equalsIgnoreCase(targetAudience) || "SHARED_WITH_STAFF".equalsIgnoreCase(targetAudience)) {
+            } else if (isCommonSpace) {
                 objectKey = user.getRole() + "/staff_shared/" + UUID.randomUUID() + "_" + originalName;
                 direction = "SHARED_WITH_STAFF";
             } else {
