@@ -1,5 +1,6 @@
 # ========================================================
-# Multi-Stage Dockerfile for Spring Boot (Railway Ready)
+# Optimized Multi-Stage Dockerfile for Spring Boot
+# Supports Render (512MB RAM free tier) & Railway
 # Project: SKC-Backend-Files
 # ========================================================
 
@@ -9,15 +10,15 @@
 FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
 
-# Cache dependencies first to speed up subsequent Docker builds
-COPY pom.xml .
-RUN mvn dependency:go-offline -B || true
+# Cap Maven heap so Render free tier builder does not run out of memory (OOM 137)
+ENV MAVEN_OPTS="-Xms64m -Xmx384m -XX:+UseSerialGC"
 
-# Copy project source code
+# Copy pom.xml and source files
+COPY pom.xml .
 COPY src ./src
 
-# Build production JAR without running tests
-RUN mvn clean package -DskipTests -B
+# Build production JAR without tests and suppress verbose download spam in Render logs
+RUN mvn clean package -DskipTests -B -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
 # --------------------------------------------------------
 # Stage 2: Minimal, secure JRE runtime
@@ -32,12 +33,13 @@ USER spring:spring
 # Copy compiled JAR from build stage
 COPY --from=build /app/target/*.jar app.jar
 
-# Railway automatically sets the PORT environment variable
+# Render and Railway automatically set the PORT environment variable
 ENV PORT=8080
 EXPOSE 8080
 
-# Optimized JVM memory flags for containerized environments
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
+# Optimized JVM memory flags for 512MB container environments
+ENV JAVA_OPTS="-Xms64m -Xmx350m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
 
-# Launch Spring Boot with dynamic port binding for Railway ($PORT)
+# Launch Spring Boot with dynamic port binding for Render/Railway ($PORT)
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT} -jar app.jar"]
+

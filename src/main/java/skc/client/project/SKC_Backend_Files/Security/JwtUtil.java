@@ -12,10 +12,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class JwtUtil {
 
-	@Value("${jwt.secret}")
+	@Value("${jwt.secret:${jwt.secretKey:heythisissrikathiravanandcoauditingportal}}")
 	private String secret;
 
-	Key key = Keys.hmacShaKeyFor(secret.getBytes());
+	private Key key;
+
+	@jakarta.annotation.PostConstruct
+	public void init() {
+		this.key = Keys.hmacShaKeyFor(secret.getBytes());
+	}
 
 	// Token expiration duration: 60 Days (60 * 24 * 60 * 60 * 1000 ms)
 	public static final long EXPIRATION_TIME_MS = 60L * 24L * 60L * 60L * 1000L;
