@@ -20,19 +20,111 @@ public class EmailService {
     @Value("${spring.mail.username:noreply@srikathiravan.com}")
     private String fromEmail;
 
+    @Value("${brevo.api.key:}")
+    private String brevoApiKey;
+
     /**
-     * Sends a general HTML email.
+     * Sends a general HTML email. Supports both standard JavaMail SMTP and Brevo HTTPS REST API (Port 443).
      */
     public void sendHtmlEmail(String to, String subject, String htmlBody) throws MessagingException {
         System.out.println(">>> [EmailService] Sending email to: " + to + " | Subject: " + subject);
-        MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-        helper.setFrom(fromEmail);
-        helper.setTo(to);
-        helper.setSubject(subject);
-        helper.setText(htmlBody, true);
-        mailSender.send(message);
-        System.out.println(">>> [EmailService] SUCCESS: Email delivered to: " + to);
+
+        // 1. If Brevo HTTP API Key is configured, prioritize HTTPS API over port 443 (Render free tier friendly!)
+        if (brevoApiKey != null && !brevoApiKey.isBlank()) {
+            boolean sent = sendViaBrevoApi(to, subject, htmlBody);
+            if (sent) return;
+        }
+
+        // 2. Standard SMTP delivery
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(htmlBody, true);
+            mailSender.send(message);
+            System.out.println(">>> [EmailService] SUCCESS: Email delivered to: " + to);
+        } catch (Exception ex) {
+            System.err.println(">>> [EmailService] SMTP delivery failed to " + to + ": " + ex.getMessage());
+            // If Brevo is configured, fallback to Brevo API
+            if (brevoApiKey != null && !brevoApiKey.isBlank()) {
+                boolean sent = sendViaBrevoApi(to, subject, htmlBody);
+                if (sent) return;
+            }
+            if (ex instanceof MessagingException) {
+                throw (MessagingException) ex;
+            }
+            throw new MessagingException("Failed to deliver email: " + ex.getMessage(), ex);
+        }
+    }
+
+    /**
+     * Dispatches transactional email via Brevo HTTPS REST API (Port 443).
+     * Bypasses hosting provider firewall restrictions on SMTP ports (25, 465, 587).
+     */
+    public boolean sendViaBrevoApi(String to, String subject, String htmlBody) {
+        try {
+            System.out.println(">>> [EmailService] Dispatching via Brevo HTTPS REST API (Port 443)...");
+            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(10))
+                    .build();
+
+            String jsonPayload = String.format(
+                    "{\"sender\":{\"name\":\"Sri Kathiravan & Co.\",\"email\":\"%s\"},\"to\":[{\"email\":\"%s\"}],\"subject\":\"%s\",\"htmlContent\":\"%s\"}",
+                    escapeJson(fromEmail),
+                    escapeJson(to),
+                    escapeJson(subject),
+                    escapeJson(htmlBody)
+            );
+
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("https://api.brevo.com/v3/smtp/email"))
+                    .header("api-key", brevoApiKey.trim())
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(jsonPayload, java.nio.charset.StandardCharsets.UTF_8))
+                    .timeout(java.time.Duration.ofSeconds(15))
+                    .build();
+
+            java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                System.out.println(">>> [EmailService] SUCCESS via Brevo HTTPS API: Delivered to " + to + " (HTTP " + response.statusCode() + ")");
+                return true;
+            } else {
+                System.err.println(">>> [EmailService] Brevo HTTPS API failed with status " + response.statusCode() + ": " + response.body());
+                return false;
+            }
+        } catch (Exception e) {
+            System.err.println(">>> [EmailService] Brevo HTTPS API exception: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private String escapeJson(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            switch (ch) {
+                case '"': sb.append("\\\""); break;
+                case '\\': sb.append("\\\\"); break;
+                case '\b': sb.append("\\b"); break;
+                case '\f': sb.append("\\f"); break;
+                case '\n': sb.append("\\n"); break;
+                case '\r': sb.append("\\r"); break;
+                case '\t': sb.append("\\t"); break;
+                default:
+                    if (ch < ' ') {
+                        String t = "000" + Integer.toHexString(ch);
+                        sb.append("\\u").append(t.substring(t.length() - 4));
+                    } else {
+                        sb.append(ch);
+                    }
+                    break;
+            }
+        }
+        return sb.toString();
     }
 
     /**
