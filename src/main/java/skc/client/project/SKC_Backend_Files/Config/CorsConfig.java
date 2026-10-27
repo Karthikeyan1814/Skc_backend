@@ -20,6 +20,7 @@ public class CorsConfig {
         configuration.setAllowedOriginPatterns(
                 List.of(
                         "http://localhost:[*]",
+                        "https://skc-office-project.vercel.app",
                         "https://*.vercel.app",
                         "https://*.railway.app",
                         "https://*.netlify.app",
@@ -37,10 +38,11 @@ public class CorsConfig {
         );
 
         configuration.setExposedHeaders(
-                List.of("Content-Disposition", "Content-Type", "Content-Length")
+                List.of("Content-Disposition", "Content-Type", "Content-Length", "X-Token-Expired", "Authorization")
         );
 
         configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
