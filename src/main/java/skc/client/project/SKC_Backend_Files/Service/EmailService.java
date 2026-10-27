@@ -122,7 +122,7 @@ public class EmailService {
 
             java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                System.out.println(">>> [EmailService] SUCCESS via Brevo HTTPS API: Delivered to " + to + " (HTTP " + response.statusCode() + ")");
+                System.out.println(">>> [EmailService] SUCCESS via Brevo HTTPS API: Queued for delivery to " + to + " (HTTP " + response.statusCode() + ") Brevo Response: " + response.body());
                 return true;
             } else {
                 System.err.println(">>> [EmailService] Brevo HTTPS API failed with status " + response.statusCode() + ": " + response.body());
