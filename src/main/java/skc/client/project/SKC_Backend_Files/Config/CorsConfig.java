@@ -16,8 +16,15 @@ public class CorsConfig {
 
         CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOrigins(
-                List.of("http://localhost:5173")
+        // Allow localhost and production frontend URLs (Vercel, Netlify, Railway, custom domain)
+        configuration.setAllowedOriginPatterns(
+                List.of(
+                        "http://localhost:[*]",
+                        "https://*.vercel.app",
+                        "https://*.railway.app",
+                        "https://*.netlify.app",
+                        "*"
+                )
         );
 
         configuration.setAllowedMethods(

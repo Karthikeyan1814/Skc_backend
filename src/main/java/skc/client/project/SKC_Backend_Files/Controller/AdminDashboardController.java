@@ -96,16 +96,27 @@ public class AdminDashboardController {
         return ResponseEntity.ok(response);
     }
 
-    // ─── Delete client ─────────────────────────────────────────────────────────────
-    @DeleteMapping("/Client/Delete/{id}")
+    // ─── Delete client (Admin only - Staff forbidden) ───────────────────────────
+    @DeleteMapping({"/Client/Delete/{id}", "/skc/Client/Delete/{id}"})
     public ResponseEntity<Object> deleteClient(@PathVariable Long id) {
+        org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getAuthorities().stream().noneMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+            Map<String, Object> err = new HashMap<>();
+            err.put("status", "forbidden");
+            err.put("message", "Staff members are not permitted to delete client accounts. Contact an administrator.");
+            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(err);
+        }
+
         Map<String, Object> response = new HashMap<>();
         if (!clientRepo.existsById(id)) {
             response.put("status", "failed");
+            response.put("message", "Client record not found");
             return ResponseEntity.badRequest().body(response);
         }
         clientRepo.deleteById(id);
         response.put("status", "success");
+        response.put("message", "Client deleted successfully");
         return ResponseEntity.ok(response);
     }
 

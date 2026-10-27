@@ -1,0 +1,13 @@
+target/
+.git
+.gitignore
+.settings/
+.classpath
+.project
+.mvn/
+*.log
+hs_err_*.log
+replay_*.log
+run_server.bat
+HELP.md
+*.md

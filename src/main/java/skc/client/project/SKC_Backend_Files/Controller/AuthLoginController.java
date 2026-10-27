@@ -1,10 +1,12 @@
 package skc.client.project.SKC_Backend_Files.Controller;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -151,21 +153,33 @@ public class AuthLoginController {
             staff.getId(), staff.getName(), staff.getEmail(), staff.getMobile(), staff.getRole(), otp, expiresAt
         ));
 
-        // Locate Admin email to receive authorization OTP
-        String adminEmail = "contact@srikathiravan.com";
-        Admin admin = adminRepo.findAll().stream().filter(Admin::isActive).findFirst().orElse(null);
-        if (admin != null && admin.getEmail() != null && admin.getEmail().contains("@")) {
-            adminEmail = admin.getEmail();
+        // Locate ALL Admin emails to receive authorization OTP
+        List<String> adminEmails = adminRepo.findAll().stream()
+            .filter(Admin::isActive)
+            .map(Admin::getEmail)
+            .filter(e -> e != null && e.trim().contains("@"))
+            .map(String::trim)
+            .distinct()
+            .collect(Collectors.toList());
+
+        if (adminEmails.isEmpty()) {
+            adminEmails.add("contact@srikathiravan.com");
         }
 
-        emailService.sendStaffLoginAdminOtp(adminEmail, staff.getName(), staff.getEmail(), staff.getMobile(), otp);
+        for (String targetAdminEmail : adminEmails) {
+            try {
+                emailService.sendStaffLoginAdminOtp(targetAdminEmail, staff.getName(), staff.getEmail(), staff.getMobile(), otp);
+            } catch (Exception ex) {
+                System.err.println("Failed to dispatch staff login OTP to admin (" + targetAdminEmail + "): " + ex.getMessage());
+            }
+        }
 
-        String maskedEmail = maskEmail(adminEmail);
+        String maskedEmail = adminEmails.stream().map(this::maskEmail).collect(Collectors.joining(", "));
         response.put("status", "OTP_REQUIRED");
         response.put("sessionId", sessionId);
         response.put("staffName", staff.getName());
         response.put("adminEmailMasked", maskedEmail);
-        response.put("message", "Staff credentials verified. For security, a 6-digit authorization code has been dispatched to the Administrator's email (" + maskedEmail + "). Please obtain the OTP from Admin to complete sign-in.");
+        response.put("message", "Staff credentials verified. For security, a 6-digit authorization code has been dispatched to all Administrators (" + maskedEmail + "). Please obtain the OTP from Admin to complete sign-in.");
         return ResponseEntity.ok(response);
     }
 
@@ -233,17 +247,29 @@ public class AuthLoginController {
             session.staffId(), session.staffName(), session.staffEmail(), session.staffMobile(), session.staffRole(), newOtp, expiresAt
         ));
 
-        String adminEmail = "contact@srikathiravan.com";
-        Admin admin = adminRepo.findAll().stream().filter(Admin::isActive).findFirst().orElse(null);
-        if (admin != null && admin.getEmail() != null && admin.getEmail().contains("@")) {
-            adminEmail = admin.getEmail();
+        List<String> adminEmails = adminRepo.findAll().stream()
+            .filter(Admin::isActive)
+            .map(Admin::getEmail)
+            .filter(e -> e != null && e.trim().contains("@"))
+            .map(String::trim)
+            .distinct()
+            .collect(Collectors.toList());
+
+        if (adminEmails.isEmpty()) {
+            adminEmails.add("contact@srikathiravan.com");
         }
 
-        emailService.sendStaffLoginAdminOtp(adminEmail, session.staffName(), session.staffEmail(), session.staffMobile(), newOtp);
+        for (String targetAdminEmail : adminEmails) {
+            try {
+                emailService.sendStaffLoginAdminOtp(targetAdminEmail, session.staffName(), session.staffEmail(), session.staffMobile(), newOtp);
+            } catch (Exception ex) {
+                System.err.println("Failed to resend staff login OTP to admin (" + targetAdminEmail + "): " + ex.getMessage());
+            }
+        }
 
-        String maskedEmail = maskEmail(adminEmail);
+        String maskedEmail = adminEmails.stream().map(this::maskEmail).collect(Collectors.joining(", "));
         response.put("status", "success");
-        response.put("message", "A new authorization OTP has been dispatched to Admin email (" + maskedEmail + ").");
+        response.put("message", "A new authorization OTP has been dispatched to all Admin emails (" + maskedEmail + ").");
         return ResponseEntity.ok(response);
     }
 

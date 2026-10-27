@@ -44,6 +44,9 @@ public class SecurityConfig {
                     auth.requestMatchers("/skc/Admin/Clients").hasAnyRole("ADMIN", "STAFF");
                     auth.requestMatchers("/skc/Admin/ClientForm/**").hasAnyRole("ADMIN", "STAFF");
 
+                    // Explicitly safeguard Delete Client endpoint - Strictly Admin only
+                    auth.requestMatchers("/skc/Admin/Client/Delete/**", "/skc/Client/Delete/**").hasRole("ADMIN");
+
                     // Admin-only routes
                     auth.requestMatchers("/skc/Admin/**").hasRole("ADMIN");
 
