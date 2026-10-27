@@ -990,52 +990,65 @@ public class AccessManagementController {
 
         int count = 0;
         List<Map<String, String>> emailTasks = new ArrayList<>();
+        Set<String> seenEmails = new HashSet<>();
+        Set<Long> notifiedClientIds = new HashSet<>();
 
-        // Dispatches based on target
+        // 1. Clients Notification & Email Dispatch
         if (target.equals("clients") || target.equals("all")) {
             List<Client> clients = clientRepo.findAll();
             for (Client c : clients) {
-                if (Boolean.TRUE.equals(c.isActive())) {
-                    notificationService.notifyClient(c.getId(), "ANNOUNCEMENT", title, message, null);
-                    if (sendEmail && c.getEmail() != null && !c.getEmail().isBlank()) {
-                        Map<String, String> item = new HashMap<>();
-                        item.put("email", c.getEmail());
-                        item.put("name", c.getName() != null ? c.getName() : "Client");
-                        emailTasks.add(item);
+                if (Boolean.TRUE.equals(c.isActive()) && c.getId() != null) {
+                    if (notifiedClientIds.add(c.getId())) {
+                        notificationService.notifyClient(c.getId(), "ANNOUNCEMENT", title, message, null);
+                        count++;
                     }
-                    count++;
+                    if (sendEmail && c.getEmail() != null && !c.getEmail().isBlank()) {
+                        String cleanEmail = c.getEmail().trim().toLowerCase();
+                        if (seenEmails.add(cleanEmail)) {
+                            Map<String, String> item = new HashMap<>();
+                            item.put("email", cleanEmail);
+                            item.put("name", c.getName() != null ? c.getName() : "Client");
+                            emailTasks.add(item);
+                        }
+                    }
                 }
             }
         }
 
+        // 2. Staff Broadcast & Email Dispatch (Single role notification so staff don't see duplicates)
         if (target.equals("staff") || target.equals("all")) {
+            notificationService.createNotification("STAFF", null, "ANNOUNCEMENT", title, message, null);
+            count++;
+
             List<Staff> staffList = staffRepo.findAll();
             for (Staff s : staffList) {
-                if (Boolean.TRUE.equals(s.isActive())) {
-                    notificationService.createNotification("STAFF", s.getId(), "ANNOUNCEMENT", title, message, null);
-                    if (sendEmail && s.getEmail() != null && !s.getEmail().isBlank()) {
+                if (Boolean.TRUE.equals(s.isActive()) && sendEmail && s.getEmail() != null && !s.getEmail().isBlank()) {
+                    String cleanEmail = s.getEmail().trim().toLowerCase();
+                    if (seenEmails.add(cleanEmail)) {
                         Map<String, String> item = new HashMap<>();
-                        item.put("email", s.getEmail());
+                        item.put("email", cleanEmail);
                         item.put("name", s.getName() != null ? s.getName() : "Staff Member");
                         emailTasks.add(item);
                     }
-                    count++;
                 }
             }
         }
 
+        // 3. Admin Broadcast & Email Dispatch (Single role notification so admins don't see duplicates)
         if (target.equals("admins") || target.equals("all")) {
+            notificationService.createNotification("ADMIN", null, "ANNOUNCEMENT", title, message, null);
+            count++;
+
             List<Admin> admins = adminRepo.findAll();
             for (Admin a : admins) {
-                if (Boolean.TRUE.equals(a.isActive())) {
-                    notificationService.createNotification("ADMIN", a.getId(), "ANNOUNCEMENT", title, message, null);
-                    if (sendEmail && a.getEmail() != null && !a.getEmail().isBlank()) {
+                if (Boolean.TRUE.equals(a.isActive()) && sendEmail && a.getEmail() != null && !a.getEmail().isBlank()) {
+                    String cleanEmail = a.getEmail().trim().toLowerCase();
+                    if (seenEmails.add(cleanEmail)) {
                         Map<String, String> item = new HashMap<>();
-                        item.put("email", a.getEmail());
+                        item.put("email", cleanEmail);
                         item.put("name", a.getName() != null ? a.getName() : "Administrator");
                         emailTasks.add(item);
                     }
-                    count++;
                 }
             }
         }

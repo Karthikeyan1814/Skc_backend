@@ -1,7 +1,7 @@
 package skc.client.project.SKC_Backend_Files.entity;
 
 import jakarta.persistence.*;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Table(name = "notifications")
@@ -18,7 +18,7 @@ public class Notification {
     private Long recipientId;
 
     // Notification type: FILE_UPLOAD, FILE_EXPIRED, MEMBERSHIP_REQUEST,
-    // APPOINTMENT_REQUEST, EXPIRY_EXTENSION_REQUEST, SYSTEM
+    // APPOINTMENT_REQUEST, EXPIRY_EXTENSION_REQUEST, SYSTEM, ANNOUNCEMENT
     private String type;
 
     private String title;
@@ -28,11 +28,13 @@ public class Notification {
     private Long referenceId;
 
     private boolean read = false;
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @PrePersist
     public void prePersist() {
-        this.createdAt = LocalDateTime.now();
+        if (this.createdAt == null) {
+            this.createdAt = Instant.now();
+        }
     }
 
     public Notification() {}
@@ -44,6 +46,7 @@ public class Notification {
         this.title = title;
         this.message = message;
         this.referenceId = referenceId;
+        this.createdAt = Instant.now();
     }
 
     // Getters and setters
@@ -62,5 +65,6 @@ public class Notification {
     public void setReferenceId(Long referenceId) { this.referenceId = referenceId; }
     public boolean isRead() { return read; }
     public void setRead(boolean read) { this.read = read; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
+    public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }
