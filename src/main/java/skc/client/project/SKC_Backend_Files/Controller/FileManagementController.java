@@ -242,6 +242,8 @@ public class FileManagementController {
         }
 
         boolean isCommonSpace = "COMMON".equalsIgnoreCase(targetAudience) || "STAFF".equalsIgnoreCase(targetAudience) || "SHARED_WITH_STAFF".equalsIgnoreCase(targetAudience);
+        String objectKey;
+        String direction;
         if (client != null && !isCommonSpace && !"PERSONAL".equalsIgnoreCase(targetAudience)) {
             objectKey = user.getRole() + "/" + clientId + "/" + UUID.randomUUID() + "_" + filename;
             direction = "SENT_TO_CLIENT";
