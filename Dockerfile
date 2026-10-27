@@ -41,5 +41,6 @@ EXPOSE 8080
 ENV JAVA_OPTS="-Xms64m -Xmx350m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
 
 # Launch Spring Boot with dynamic port binding for Render/Railway ($PORT)
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT} -jar app.jar"]
+# Supports Render Secret Files mounted at /etc/secrets/application.properties
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT} -Dspring.config.additional-location=optional:file:/etc/secrets/application.properties,optional:file:/etc/secrets/ -jar app.jar"]
 
